@@ -496,7 +496,6 @@ export class CompositeOverflowActivityActionViewItem extends ActivityActionViewI
 	private getActions(): IAction[] {
 		return this.getOverflowingComposites().map(composite => {
 			const action = this.getCompositeOpenAction(composite.id);
-			action.checked = this.getActiveCompositeId() === action.id;
 
 			const badge = this.getBadge(composite.id);
 			let suffix: string | number | undefined;
@@ -506,13 +505,14 @@ export class CompositeOverflowActivityActionViewItem extends ActivityActionViewI
 				suffix = badge.text;
 			}
 
+			let label: string;
 			if (suffix) {
-				action.label = localize('numberBadge', "{0} ({1})", composite.name, suffix);
+				label = localize('numberBadge', "{0} ({1})", composite.name, suffix);
 			} else {
-				action.label = composite.name || '';
+				label = composite.name || '';
 			}
 
-			return action;
+			return { ...action, checked: this.getActiveCompositeId() === action.id, label };
 		});
 	}
 
@@ -545,7 +545,7 @@ export class CompositeActionViewItem extends ActivityActionViewItem {
 	constructor(
 		options: IActivityActionViewItemOptions,
 		private readonly compositeActivityAction: ActivityAction,
-		private readonly toggleCompositePinnedAction: IAction,
+		private readonly toggleCompositePinnedAction: Action,
 		private readonly compositeContextMenuActionsProvider: (compositeId: string) => IAction[],
 		private readonly contextMenuActionsProvider: () => IAction[],
 		private readonly dndHandler: ICompositeDragAndDrop,

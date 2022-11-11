@@ -361,12 +361,13 @@ class SingleTerminalTabActionViewItem extends MenuEntryActionViewItem {
 		this._register(this._terminalService.onDidChangeInstanceColor(e => this.updateLabel(e.instance)));
 		this._register(this._terminalService.onDidChangeInstanceTitle(e => {
 			if (e === this._terminalGroupService.activeInstance) {
-				this._action.tooltip = getSingleTabTooltip(e, this._terminalService.configHelper.config.tabs.separator);
+				// TODO: Fix types
+				(this._action as unknown as Action).tooltip = getSingleTabTooltip(e, this._terminalService.configHelper.config.tabs.separator);
 				this.updateLabel();
 			}
 		}));
 		this._register(this._terminalService.onDidChangeInstanceCapability(e => {
-			this._action.tooltip = getSingleTabTooltip(e, this._terminalService.configHelper.config.tabs.separator);
+			(this._action as unknown as Action).tooltip = getSingleTabTooltip(e, this._terminalService.configHelper.config.tabs.separator);
 			this.updateLabel(e);
 		}));
 
