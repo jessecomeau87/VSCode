@@ -562,6 +562,12 @@ export class ExtHostTextEditor {
 			},
 			hide() {
 				_proxy.$tryHideEditor(id);
+			},
+			getEncoding(): Promise<string | undefined> {
+				return _proxy.$tryGetEncoding(id);
+			},
+			setEncoding(encoding: string): void {
+				_proxy.$trySetEncoding(id, encoding);
 			}
 		});
 	}
