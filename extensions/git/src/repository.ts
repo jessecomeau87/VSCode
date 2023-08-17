@@ -829,7 +829,11 @@ export class Repository implements Disposable {
 		this.disposables.push(this.onDidRunGitStatus(() => this.updateInputBoxPlaceholder()));
 
 		this._mergeGroup = this._sourceControl.createResourceGroup('merge', l10n.t('Merge Changes'));
-		this._indexGroup = this._sourceControl.createResourceGroup('index', l10n.t('Staged Changes'));
+		const indexGroupId = 'index';
+		// Static context key required by when-clause of git.stage contribution to editor/title menu
+		// because 'in' operator cannot take a string constant as its first operand.
+		commands.executeCommand('setContext', 'git.stagedChangesGroup', indexGroupId);
+		this._indexGroup = this._sourceControl.createResourceGroup(indexGroupId, l10n.t('Staged Changes'));
 		this._workingTreeGroup = this._sourceControl.createResourceGroup('workingTree', l10n.t('Changes'));
 		this._untrackedGroup = this._sourceControl.createResourceGroup('untracked', l10n.t('Untracked Changes'));
 
