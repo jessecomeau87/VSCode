@@ -17,11 +17,16 @@ const minimatch = require('minimatch');
 const fs = require('fs');
 const playwright = require('@playwright/test');
 const { applyReporter } = require('../reporter');
+const http = require('http');
+const { join } = require('path');
+const { readFileSync } = require('fs');
+const { promisify } = require('util');
 
 // opts
 const defaultReporterName = process.platform === 'win32' ? 'list' : 'spec';
 const optimist = require('optimist')
 	// .describe('grep', 'only run tests matching <pattern>').alias('grep', 'g').alias('grep', 'f').string('grep')
+	.describe('esm', 'Assume ESM output').boolean('esm')
 	.describe('build', 'run with build output (out-build)').boolean('build')
 	.describe('run', 'only run tests matching <relative_file_path>').string('run')
 	.describe('grep', 'only run tests matching <pattern>').alias('grep', 'g').alias('grep', 'f').string('grep')
@@ -40,6 +45,8 @@ if (argv.help) {
 	optimist.showHelp();
 	process.exit(0);
 }
+
+const isDebug = !!argv.debug;
 
 const withReporter = (function () {
 	if (argv.tfs) {
@@ -126,11 +133,57 @@ function consoleLogFn(msg) {
 	return console.log;
 }
 
+
+
 async function runTestsInBrowser(testModules, browserType) {
-	const browser = await playwright[browserType].launch({ headless: !Boolean(argv.debug), devtools: Boolean(argv.debug) });
+
+	let target = url.pathToFileURL(path.join(__dirname, 'renderer.html'));
+	let server;
+	if (argv.esm) {
+
+		// 1: setup a server because ESM doesn't support file://
+		const port = 3000 + Math.ceil(Math.random() * 5080);
+		const base = join(__dirname, '../../../');
+
+
+		server = http.createServer(function (req, res) {
+			try {
+				// @ts-ignore
+				const relative = req.url.replace(/\?.*$/, '');
+				const path = join(base, relative);
+				const buffer = readFileSync(path);
+				if (req.url?.endsWith('.js')) {
+					res.setHeader('Content-Type', 'text/javascript');
+				} else if (req.url?.endsWith('.css')) {
+					res.setHeader('Content-Type', 'text/css');
+				}
+				res.writeHead(200);
+				res.end(buffer);
+			} catch (err) {
+				console.error(err);
+				res.writeHead(404);
+				res.end();
+			}
+		});
+		server.on('error', (err) => {
+			console.error(err);
+		});
+
+		server.listen(port);
+
+		target = new URL(`http://localhost:${port}/test/unit/browser/renderer-esm.html`);
+
+		// 2: glob all CSS files for import-maps
+		const cssModules = (await promisify(glob)('**/*.css', { cwd: out })).sort();
+		const cssData = await new Response((await new Response(cssModules.join(',')).blob()).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+		const cssDataBase64 = Buffer.from(cssData).toString('base64');
+		target.searchParams.set('css', cssDataBase64);
+	}
+
+	const browser = await playwright[browserType].launch({ headless: !isDebug, devtools: isDebug });
 	const context = await browser.newContext();
 	const page = await context.newPage();
-	const target = url.pathToFileURL(path.join(__dirname, 'renderer.html'));
+
 	if (argv.build) {
 		if (process.env.BUILD_ARTIFACTSTAGINGDIRECTORY) {
 			target.search = `?build=true&ci=true`;
@@ -190,7 +243,10 @@ async function runTestsInBrowser(testModules, browserType) {
 	} catch (err) {
 		console.error(err);
 	}
-	await browser.close();
+	if (!isDebug) {
+		await browser.close();
+		server?.close();
+	}
 
 	if (failingTests.length > 0) {
 		let res = `The followings tests are failing:\n - ${failingTests.map(({ title, message }) => `${title} (reason: ${message})`).join('\n - ')}`;
@@ -287,7 +343,9 @@ testModules.then(async modules => {
 			console.log(msg);
 		}
 	}
-	process.exit(didFail ? 1 : 0);
+	if (!isDebug) {
+		process.exit(didFail ? 1 : 0);
+	}
 
 }).catch(err => {
 	console.error(err);

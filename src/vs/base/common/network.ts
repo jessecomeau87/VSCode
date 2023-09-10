@@ -5,7 +5,9 @@
 
 import * as errors from 'vs/base/common/errors';
 import * as platform from 'vs/base/common/platform';
+import * as path from 'vs/base/common/path';
 import { URI } from 'vs/base/common/uri';
+import { isESM } from 'vs/base/common/amd';
 
 export namespace Schemas {
 
@@ -203,7 +205,7 @@ class FileAccessImpl {
 	 * **Note:** use `dom.ts#asCSSUrl` whenever the URL is to be used in CSS context.
 	 */
 	asBrowserUri(resourcePath: AppResourcePath | ''): URI {
-		const uri = this.toUri(resourcePath, require);
+		const uri = (isESM ? this.toUri(resourcePath) : this.toUri(resourcePath, require));
 		return this.uriToBrowserUri(uri);
 	}
 
@@ -250,7 +252,7 @@ class FileAccessImpl {
 	 * is responsible for loading.
 	 */
 	asFileUri(resourcePath: AppResourcePath | ''): URI {
-		const uri = this.toUri(resourcePath, require);
+		const uri = (isESM ? this.toUri(resourcePath) : this.toUri(resourcePath, require));
 		return this.uriToFileUri(uri);
 	}
 
@@ -275,12 +277,24 @@ class FileAccessImpl {
 		return uri;
 	}
 
-	private toUri(uriOrModule: URI | string, moduleIdToUrl: { toUrl(moduleId: string): string }): URI {
+	private toUri(uriOrModule: URI | string, moduleIdToUrl?: { toUrl(moduleId: string): string }): URI {
 		if (URI.isUri(uriOrModule)) {
 			return uriOrModule;
 		}
 
-		return URI.parse(moduleIdToUrl.toUrl(uriOrModule));
+		if (globalThis._VSCODE_FILE_ROOT) {
+			const rootUriOrPath = globalThis._VSCODE_FILE_ROOT;
+
+			if (/^\w[\w\d+.-]*:\/\//.test(rootUriOrPath)) {
+				return URI.joinPath(URI.parse(rootUriOrPath, true), uriOrModule);
+
+			} else {
+				const modulePath = path.join(rootUriOrPath, uriOrModule);
+				return URI.parse(modulePath);
+			}
+		}
+
+		return URI.parse(moduleIdToUrl!.toUrl(uriOrModule));
 	}
 }
 

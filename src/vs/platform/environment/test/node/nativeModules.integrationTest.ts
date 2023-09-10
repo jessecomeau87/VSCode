@@ -19,7 +19,12 @@ flakySuite('Native Modules (all platforms)', () => {
 	});
 
 	test('native-is-elevated', async () => {
+		// ESM-comment-begin
 		const isElevated = await import('native-is-elevated');
+		// ESM-comment-end
+		// ESM-uncomment-begin
+		// const isElevated = (await import('native-is-elevated')).default;
+		// ESM-uncomment-end
 		assert.ok(typeof isElevated === 'function', testErrorMessage('native-is-elevated '));
 
 		const result = isElevated();
@@ -56,7 +61,12 @@ flakySuite('Native Modules (all platforms)', () => {
 	});
 
 	test('@vscode/sqlite3', async () => {
+		// ESM-comment-begin
 		const sqlite3 = await import('@vscode/sqlite3');
+		// ESM-comment-end
+		// ESM-uncomment-begin
+		// const { default: sqlite3 } = await import('@vscode/sqlite3');
+		// ESM-uncomment-end
 		assert.ok(typeof sqlite3.Database === 'function', testErrorMessage('@vscode/sqlite3'));
 	});
 

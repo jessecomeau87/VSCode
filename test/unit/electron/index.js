@@ -7,7 +7,7 @@
 // come before any mocha imports.
 process.env.MOCHA_COLORS = '1';
 
-const { app, BrowserWindow, ipcMain, crashReporter } = require('electron');
+const { app, BrowserWindow, ipcMain, crashReporter, session } = require('electron');
 const product = require('../../../product.json');
 const { tmpdir } = require('os');
 const { existsSync, mkdirSync } = require('fs');
@@ -33,6 +33,7 @@ const optimist = require('optimist')
 	.describe('timeout', 'timeout for tests')
 	.describe('crash-reporter-directory', 'crash reporter directory').string('crash-reporter-directory')
 	.describe('tfs').string('tfs')
+	.describe('esm').string('esm')
 	.describe('help', 'show the help').alias('help', 'h');
 
 const argv = optimist.argv;
@@ -151,6 +152,11 @@ class IPCRunner extends events.EventEmitter {
 
 app.on('ready', () => {
 
+	session.defaultSession.protocol.registerFileProtocol('vscode-file', (request, callback) => {
+		const path = new URL(request.url).pathname;
+		callback({ path });
+	});
+
 	ipcMain.on('error', (_, err) => {
 		if (!argv.dev) {
 			console.error(err);
@@ -235,7 +241,9 @@ app.on('ready', () => {
 		win.webContents.send('run', argv);
 	}
 
-	win.loadURL(url.format({ pathname: path.join(__dirname, 'renderer.html'), protocol: 'file:', slashes: true }));
+	const target = url.pathToFileURL(path.join(__dirname, `renderer${argv.esm ? '-esm' : ''}.html`));
+	target.searchParams.set('argv', JSON.stringify(argv));
+	win.loadURL(target.href);
 
 	const runner = new IPCRunner();
 	createStatsCollector(runner);

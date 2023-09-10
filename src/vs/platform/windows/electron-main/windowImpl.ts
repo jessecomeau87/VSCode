@@ -42,8 +42,10 @@ import { IPolicyService } from 'vs/platform/policy/common/policy';
 import { IUserDataProfile } from 'vs/platform/userDataProfile/common/userDataProfile';
 import { IStateService } from 'vs/platform/state/node/state';
 import { IUserDataProfilesMainService } from 'vs/platform/userDataProfile/electron-main/userDataProfile';
+import { isESM } from 'vs/base/common/amd';
 import { ILoggerMainService } from 'vs/platform/log/electron-main/loggerService';
 import { firstOrDefault } from 'vs/base/common/arrays';
+import { IWindowDevelopmentService as IWindowDevelopmentService } from 'vs/platform/windows/electron-main/windowDevService';
 
 export interface IWindowCreationOptions {
 	readonly state: IWindowState;
@@ -192,6 +194,7 @@ export class CodeWindow extends Disposable implements ICodeWindow {
 		@IProductService private readonly productService: IProductService,
 		@IProtocolMainService private readonly protocolMainService: IProtocolMainService,
 		@IWindowsMainService private readonly windowsMainService: IWindowsMainService,
+		@IWindowDevelopmentService private readonly windowDevService: IWindowDevelopmentService,
 		@IStateService private readonly stateService: IStateService
 	) {
 		super();
@@ -220,7 +223,7 @@ export class CodeWindow extends Disposable implements ICodeWindow {
 				show: !isFullscreenOrMaximized, // reduce flicker by showing later
 				title: this.productService.nameLong,
 				webPreferences: {
-					preload: FileAccess.asFileUri('vs/base/parts/sandbox/electron-sandbox/preload.js').fsPath,
+					preload: FileAccess.asFileUri(`vs/base/parts/sandbox/electron-sandbox/preload${isESM ? '.cjs' : '.js'}`).fsPath,
 					additionalArguments: [`--vscode-window-config=${this.configObjectUrl.resource.toString()}`],
 					v8CacheOptions: this.environmentMainService.useCodeCache ? 'bypassHeatCheck' : 'none',
 					enableWebSQL: false,
@@ -834,7 +837,7 @@ export class CodeWindow extends Disposable implements ICodeWindow {
 		}
 	}
 
-	load(configuration: INativeWindowConfiguration, options: ILoadOptions = Object.create(null)): void {
+	async load(configuration: INativeWindowConfiguration, options: ILoadOptions = Object.create(null)): Promise<void> {
 		this.logService.trace(`window#load: attempt to load window (id: ${this._id})`);
 
 		// Clear Document Edited if needed
@@ -874,8 +877,13 @@ export class CodeWindow extends Disposable implements ICodeWindow {
 		// Indicate we are navigting now
 		this.readyState = ReadyState.NAVIGATING;
 
+		let winUri = FileAccess.asBrowserUri(`vs/code/electron-sandbox/workbench/workbench${this.environmentMainService.isBuilt ? '' : '-dev'}.html`);
+
+		// attach CSS dev data
+		winUri = await this.windowDevService.appendDevSearchParams(winUri);
+
 		// Load URL
-		this._win.loadURL(FileAccess.asBrowserUri(`vs/code/electron-sandbox/workbench/workbench${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true));
+		this._win.loadURL(winUri.toString(true));
 
 		// Remember that we did load
 		const wasLoaded = this.wasLoaded;
