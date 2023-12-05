@@ -115,6 +115,7 @@ export interface NativeParsedArgs {
 	'profile'?: string;
 	'profile-temp'?: boolean;
 	'disable-chromium-sandbox'?: boolean;
+	'enable-native-wayland-client'?: boolean;
 
 	'enable-coi'?: boolean;
 
