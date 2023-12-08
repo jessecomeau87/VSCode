@@ -566,8 +566,8 @@ export class ExtHostTextEditor {
 			getEncoding(): Promise<string | undefined> {
 				return _proxy.$tryGetEncoding(id);
 			},
-			setEncoding(encoding: string): void {
-				_proxy.$trySetEncoding(id, encoding);
+			setEncoding(encoding: string): Promise<void> {
+				return _proxy.$trySetEncoding(id, encoding);
 			}
 		});
 	}

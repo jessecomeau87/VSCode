@@ -16,6 +16,6 @@ declare module 'vscode' {
 		 * Set the text editor encoding.
 		 * @param encoding
 		 */
-		setEncoding(encoding: string): void;
+		setEncoding(encoding: string): Thenable<void>;
 	}
 }
