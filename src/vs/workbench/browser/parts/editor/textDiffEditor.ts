@@ -20,7 +20,7 @@ import { ITextResourceConfigurationChangeEvent, ITextResourceConfigurationServic
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { TextFileOperationError, TextFileOperationResult } from 'vs/workbench/services/textfile/common/textfiles';
-import { ScrollType, IDiffEditorViewState, IDiffEditorModel } from 'vs/editor/common/editorCommon';
+import { ScrollType, IDiffEditorViewState, IDiffEditorModel, IDiffEditorViewModel } from 'vs/editor/common/editorCommon';
 import { Registry } from 'vs/platform/registry/common/platform';
 import { URI } from 'vs/base/common/uri';
 import { IEditorGroup, IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
@@ -34,7 +34,7 @@ import { ByteSize, FileOperationError, FileOperationResult, IFileService, TooLar
 import { IBoundarySashes } from 'vs/base/browser/ui/sash/sash';
 import { IPreferencesService } from 'vs/workbench/services/preferences/common/preferences';
 import { StopWatch } from 'vs/base/common/stopwatch';
-import { DiffEditorWidget2 } from 'vs/editor/browser/widget/diffEditorWidget2/diffEditorWidget2';
+import { DiffEditorWidget } from 'vs/editor/browser/widget/diffEditor/diffEditorWidget';
 
 /**
  * The text editor that leverages the diff text editor for the editing experience.
@@ -80,7 +80,7 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 	}
 
 	protected override createEditorControl(parent: HTMLElement, configuration: ICodeEditorOptions): void {
-		this.diffEditorControl = this._register(this.instantiationService.createInstance(DiffEditorWidget2, parent, configuration, {}));
+		this.diffEditorControl = this._register(this.instantiationService.createInstance(DiffEditorWidget, parent, configuration, {}));
 	}
 
 	protected updateEditorControlOptions(options: ICodeEditorOptions): void {
@@ -91,7 +91,13 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 		return this.diffEditorControl?.getModifiedEditor();
 	}
 
+	private _previousViewModel: IDiffEditorViewModel | null = null;
+
 	override async setInput(input: DiffEditorInput, options: ITextEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
+		if (this._previousViewModel) {
+			this._previousViewModel.dispose();
+			this._previousViewModel = null;
+		}
 
 		// Cleanup previous things associated with the input
 		this.inputLifecycleStopWatch = undefined;
@@ -118,6 +124,7 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 			const resolvedDiffEditorModel = resolvedModel as TextDiffEditorModel;
 
 			const vm = resolvedDiffEditorModel.textDiffEditorModel ? control.createViewModel(resolvedDiffEditorModel.textDiffEditorModel) : null;
+			this._previousViewModel = vm;
 			await vm?.waitForDiff();
 			control.setModel(vm);
 
@@ -146,6 +153,8 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 				...this.getReadonlyConfiguration(resolvedDiffEditorModel.modifiedModel?.isReadonly()),
 				originalEditable: !resolvedDiffEditorModel.originalModel?.isReadonly()
 			});
+
+			control.handleInitialized();
 
 			// Start to measure input lifecycle
 			this.inputLifecycleStopWatch = new StopWatch(false);
@@ -265,9 +274,9 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 		return editorConfiguration;
 	}
 
-	protected override getConfigurationOverrides(): IDiffEditorOptions {
+	protected override getConfigurationOverrides(configuration: IEditorConfiguration): IDiffEditorOptions {
 		return {
-			...super.getConfigurationOverrides(),
+			...super.getConfigurationOverrides(configuration),
 			...this.getReadonlyConfiguration(this.input?.isReadonly()),
 			originalEditable: this.input instanceof DiffEditorInput && !this.input.original.isReadonly(),
 			lineDecorationsWidth: '2ch'
@@ -298,6 +307,11 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 	}
 
 	override clearInput(): void {
+		if (this._previousViewModel) {
+			this._previousViewModel.dispose();
+			this._previousViewModel = null;
+		}
+
 		super.clearInput();
 
 		// Log input lifecycle telemetry
@@ -313,7 +327,7 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 
 	private logInputLifecycleTelemetry(duration: number, languageId: string | undefined): void {
 		let collapseUnchangedRegions = false;
-		if (this.diffEditorControl instanceof DiffEditorWidget2) {
+		if (this.diffEditorControl instanceof DiffEditorWidget) {
 			collapseUnchangedRegions = this.diffEditorControl.collapseUnchangedRegions;
 		}
 		this.telemetryService.publicLog2<{
@@ -338,6 +352,8 @@ export class TextDiffEditor extends AbstractTextEditor<IDiffEditorViewState> imp
 	}
 
 	override focus(): void {
+		super.focus();
+
 		this.diffEditorControl?.focus();
 	}
 

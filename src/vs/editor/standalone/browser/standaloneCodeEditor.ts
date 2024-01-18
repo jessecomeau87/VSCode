@@ -36,8 +36,9 @@ import { PLAINTEXT_LANGUAGE_ID } from 'vs/editor/common/languages/modesRegistry'
 import { ILanguageConfigurationService } from 'vs/editor/common/languages/languageConfigurationRegistry';
 import { IEditorConstructionOptions } from 'vs/editor/browser/config/editorConfiguration';
 import { ILanguageFeaturesService } from 'vs/editor/common/services/languageFeatures';
-import { DiffEditorWidget2 } from 'vs/editor/browser/widget/diffEditorWidget2/diffEditorWidget2';
+import { DiffEditorWidget } from 'vs/editor/browser/widget/diffEditor/diffEditorWidget';
 import { IAudioCueService } from 'vs/platform/audioCues/browser/audioCueService';
+import { mainWindow } from 'vs/base/browser/window';
 
 /**
  * Description of an action contribution
@@ -119,7 +120,7 @@ export interface IGlobalEditorOptions {
 	 * Controls whether completions should be computed based on words in the document.
 	 * Defaults to true.
 	 */
-	wordBasedSuggestions?: boolean;
+	wordBasedSuggestions?: 'off' | 'currentDocument' | 'matchingDocuments' | 'allDocuments';
 	/**
 	 * Controls whether word based completions should be included from opened documents of the same language or any language.
 	 */
@@ -252,7 +253,7 @@ function createAriaDomNode(parent: HTMLElement | undefined) {
 		}
 		ariaDomNodeCreated = true;
 	}
-	aria.setARIAContainer(parent || document.body);
+	aria.setARIAContainer(parent || mainWindow.document.body);
 }
 
 /**
@@ -367,6 +368,7 @@ export class StandaloneCodeEditor extends CodeEditorWidget implements IStandalon
 			uniqueId,
 			label,
 			label,
+			undefined,
 			precondition,
 			(...args: unknown[]) => Promise.resolve(_descriptor.run(this, ...args)),
 			this._contextKeyService
@@ -480,7 +482,7 @@ export class StandaloneEditor extends StandaloneCodeEditor implements IStandalon
 	}
 }
 
-export class StandaloneDiffEditor2 extends DiffEditorWidget2 implements IStandaloneDiffEditor {
+export class StandaloneDiffEditor2 extends DiffEditorWidget implements IStandaloneDiffEditor {
 
 	private readonly _configurationService: IConfigurationService;
 	private readonly _standaloneThemeService: IStandaloneThemeService;

@@ -187,6 +187,12 @@ export function forEachAdjacent<T>(arr: T[], f: (item1: T | undefined, item2: T 
 	}
 }
 
+export function forEachWithNeighbors<T>(arr: T[], f: (before: T | undefined, element: T, after: T | undefined) => void): void {
+	for (let i = 0; i < arr.length; i++) {
+		f(i === 0 ? undefined : arr[i - 1], arr[i], i + 1 === arr.length ? undefined : arr[i + 1]);
+	}
+}
+
 interface IMutableSplice<T> extends ISplice<T> {
 	readonly toInsert: T[];
 	deleteCount: number;
@@ -341,7 +347,7 @@ export function coalesce<T>(array: ReadonlyArray<T | undefined | null>): T[] {
 /**
  * Remove all falsy values from `array`. The original array IS modified.
  */
-export function coalesceInPlace<T>(array: Array<T | undefined | null>): void {
+export function coalesceInPlace<T>(array: Array<T | undefined | null>): asserts array is Array<T> {
 	let to = 0;
 	for (let i = 0; i < array.length; i++) {
 		if (!!array[i]) {
@@ -613,7 +619,11 @@ export function insertInto<T>(array: T[], start: number, newItems: T[]): void {
  */
 export function splice<T>(array: T[], start: number, deleteCount: number, newItems: T[]): T[] {
 	const index = getActualStartIndex(array, start);
-	const result = array.splice(index, deleteCount);
+	let result = array.splice(index, deleteCount);
+	if (result === undefined) {
+		// see https://bugs.webkit.org/show_bug.cgi?id=261140
+		result = [];
+	}
 	insertInto(array, index, newItems);
 	return result;
 }

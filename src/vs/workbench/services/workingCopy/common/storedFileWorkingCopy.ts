@@ -7,7 +7,7 @@ import { localize } from 'vs/nls';
 import { URI } from 'vs/base/common/uri';
 import { Event, Emitter } from 'vs/base/common/event';
 import { CancellationToken, CancellationTokenSource } from 'vs/base/common/cancellation';
-import { ETAG_DISABLED, FileOperationError, FileOperationResult, IFileService, IFileStatWithMetadata, IFileStreamContent, IWriteFileOptions, NotModifiedSinceFileOperationError } from 'vs/platform/files/common/files';
+import { ETAG_DISABLED, FileOperationError, FileOperationResult, IFileReadLimits, IFileService, IFileStatWithMetadata, IFileStreamContent, IWriteFileOptions, NotModifiedSinceFileOperationError } from 'vs/platform/files/common/files';
 import { ISaveOptions, IRevertOptions, SaveReason } from 'vs/workbench/common/editor';
 import { IWorkingCopyService } from 'vs/workbench/services/workingCopy/common/workingCopyService';
 import { IWorkingCopyBackup, IWorkingCopyBackupMeta, IWorkingCopySaveEvent, WorkingCopyCapabilities } from 'vs/workbench/services/workingCopy/common/workingCopy';
@@ -262,6 +262,12 @@ export interface IStoredFileWorkingCopyResolveOptions {
 	 * Go to disk bypassing any cache of the stored file working copy if any.
 	 */
 	readonly forceReadFromFile?: boolean;
+
+	/**
+	 * If provided, the size of the file will be checked against the limits
+	 * and an error will be thrown if any limit is exceeded.
+	 */
+	readonly limits?: IFileReadLimits;
 }
 
 /**
@@ -289,7 +295,7 @@ export function isStoredFileWorkingCopySaveEvent(e: IWorkingCopySaveEvent): e is
 	return !!candidate.stat;
 }
 
-export class StoredFileWorkingCopy<M extends IStoredFileWorkingCopyModel> extends ResourceWorkingCopy implements IStoredFileWorkingCopy<M>  {
+export class StoredFileWorkingCopy<M extends IStoredFileWorkingCopyModel> extends ResourceWorkingCopy implements IStoredFileWorkingCopy<M> {
 
 	readonly capabilities: WorkingCopyCapabilities = WorkingCopyCapabilities.None;
 
@@ -347,7 +353,7 @@ export class StoredFileWorkingCopy<M extends IStoredFileWorkingCopyModel> extend
 	}
 
 	private registerListeners(): void {
-		this._register(this.filesConfigurationService.onReadonlyChange(() => this._onDidChangeReadonly.fire()));
+		this._register(this.filesConfigurationService.onDidChangeReadonly(() => this._onDidChangeReadonly.fire()));
 	}
 
 	//#region Dirty
@@ -571,7 +577,10 @@ export class StoredFileWorkingCopy<M extends IStoredFileWorkingCopyModel> extend
 
 		// Resolve Content
 		try {
-			const content = await this.fileService.readFileStream(this.resource, { etag });
+			const content = await this.fileService.readFileStream(this.resource, {
+				etag,
+				limits: options?.limits
+			});
 
 			// Clear orphaned state when resolving was successful
 			this.setOrphaned(false);
@@ -1169,8 +1178,8 @@ export class StoredFileWorkingCopy<M extends IStoredFileWorkingCopyModel> extend
 		const handle = this.notificationService.notify({ id: `${hash(this.resource.toString())}`, severity: Severity.Error, message, actions: { primary: primaryActions } });
 
 		// Remove automatically when we get saved/reverted
-		const listener = Event.once(Event.any(this.onDidSave, this.onDidRevert))(() => handle.close());
-		Event.once(handle.onDidClose)(() => listener.dispose());
+		const listener = this._register(Event.once(Event.any(this.onDidSave, this.onDidRevert))(() => handle.close()));
+		this._register(Event.once(handle.onDidClose)(() => listener.dispose()));
 	}
 
 	private updateLastResolvedFileStat(newFileStat: IFileStatWithMetadata): void {

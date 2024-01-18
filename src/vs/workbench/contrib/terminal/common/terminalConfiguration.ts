@@ -11,6 +11,7 @@ import { isMacintosh, isWindows } from 'vs/base/common/platform';
 import { Registry } from 'vs/platform/registry/common/platform';
 import { Codicon } from 'vs/base/common/codicons';
 import { terminalColorSchema, terminalIconSchema } from 'vs/platform/terminal/common/terminalPlatformConfiguration';
+import product from 'vs/platform/product/common/product';
 
 const terminalDescriptors = '\n- ' + [
 	'`\${cwd}`: ' + localize("cwd", "the terminal's current working directory"),
@@ -106,11 +107,6 @@ const terminalConfiguration: IConfigurationNode = {
 			default: 'right',
 			description: localize('terminal.integrated.tabs.location', "Controls the location of the terminal tabs, either to the left or right of the actual terminal(s).")
 		},
-		[TerminalSettingId.TabFocusMode]: {
-			markdownDescription: localize('tabFocusMode', "Controls whether the terminal receives tabs or defers them to the workbench for navigation. When set, this overrides {0} when the terminal is focused.", '`#editor.tabFocusMode#`'),
-			type: ['boolean', 'null'],
-			default: null
-		},
 		[TerminalSettingId.DefaultLocation]: {
 			type: 'string',
 			enum: [TerminalLocationString.Editor, TerminalLocationString.TerminalView],
@@ -152,9 +148,15 @@ const terminalConfiguration: IConfigurationNode = {
 			default: false
 		},
 		[TerminalSettingId.EnableMultiLinePasteWarning]: {
-			markdownDescription: localize('terminal.integrated.enableMultiLinePasteWarning', "Show a warning dialog when pasting multiple lines into the terminal. The dialog does not show when:\n\n- Bracketed paste mode is enabled (the shell supports multi-line paste natively)\n- The paste is handled by the shell's readline (in the case of pwsh)"),
-			type: 'boolean',
-			default: true
+			markdownDescription: localize('terminal.integrated.enableMultiLinePasteWarning', "Controls whether to show a warning dialog when pasting multiple lines into the terminal."),
+			type: 'string',
+			enum: ['auto', 'always', 'never'],
+			markdownEnumDescriptions: [
+				localize('terminal.integrated.enableMultiLinePasteWarning.auto', "Enable the warning but do not show it when:\n\n- Bracketed paste mode is enabled (the shell supports multi-line paste natively)\n- The paste is handled by the shell's readline (in the case of pwsh)"),
+				localize('terminal.integrated.enableMultiLinePasteWarning.always', "Always show the warning if the text contains a new line."),
+				localize('terminal.integrated.enableMultiLinePasteWarning.never', "Never show the warning.")
+			],
+			default: 'auto'
 		},
 		[TerminalSettingId.DrawBoldTextInBrightColors]: {
 			description: localize('terminal.integrated.drawBoldTextInBrightColors', "Controls whether bold text in the terminal will always use the \"bright\" ANSI color variant."),
@@ -304,7 +306,7 @@ const terminalConfiguration: IConfigurationNode = {
 		[TerminalSettingId.TerminalTitleSeparator]: {
 			'type': 'string',
 			'default': ' - ',
-			'markdownDescription': localize("terminal.integrated.tabs.separator", "Separator used by {0} and {0}.", `\`${TerminalSettingId.TerminalTitle}\``, `\`${TerminalSettingId.TerminalDescription}\``)
+			'markdownDescription': localize("terminal.integrated.tabs.separator", "Separator used by {0} and {1}.", `\`#${TerminalSettingId.TerminalTitle}#\``, `\`#${TerminalSettingId.TerminalDescription}#\``)
 		},
 		[TerminalSettingId.TerminalTitle]: {
 			'type': 'string',
@@ -427,7 +429,7 @@ const terminalConfiguration: IConfigurationNode = {
 			default: 'warnonly'
 		},
 		[TerminalSettingId.EnvironmentChangesRelaunch]: {
-			markdownDescription: localize('terminal.integrated.environmentChangesRelaunch', "Whether to relaunch terminals automatically if extension want to contribute to their environment and have not been interacted with yet."),
+			markdownDescription: localize('terminal.integrated.environmentChangesRelaunch', "Whether to relaunch terminals automatically if extensions want to contribute to their environment and have not been interacted with yet."),
 			type: 'boolean',
 			default: true
 		},
@@ -546,7 +548,7 @@ const terminalConfiguration: IConfigurationNode = {
 			default: 'never'
 		},
 		[TerminalSettingId.CustomGlyphs]: {
-			description: localize('terminal.integrated.customGlyphs', "Whether to draw custom glyphs for block element and box drawing characters instead of using the font, which typically yields better rendering with continuous lines. Note that this doesn't work when {0} is disabled.", `\`#${TerminalSettingId.GpuAcceleration}#\``),
+			markdownDescription: localize('terminal.integrated.customGlyphs', "Whether to draw custom glyphs for block element and box drawing characters instead of using the font, which typically yields better rendering with continuous lines. Note that this doesn't work when {0} is disabled.", `\`#${TerminalSettingId.GpuAcceleration}#\``),
 			type: 'boolean',
 			default: true
 		},
@@ -619,7 +621,36 @@ const terminalConfiguration: IConfigurationNode = {
 				localize('terminal.integrated.focusAfterRun.accessible-buffer', "Always focus the accessible buffer."),
 				localize('terminal.integrated.focusAfterRun.none', "Do nothing."),
 			]
-		}
+		},
+		[TerminalSettingId.AccessibleViewPreserveCursorPosition]: {
+			markdownDescription: localize('terminal.integrated.accessibleViewPreserveCursorPosition', "Preserve the cursor position on reopen of the terminal's accessible view rather than setting it to the bottom of the buffer."),
+			type: 'boolean',
+			default: false
+		},
+		[TerminalSettingId.AccessibleViewFocusOnCommandExecution]: {
+			markdownDescription: localize('terminal.integrated.accessibleViewFocusOnCommandExecution', "Focus the terminal accessible view when a command is executed."),
+			type: 'boolean',
+			default: false
+		},
+		[TerminalSettingId.StickyScrollEnabled]: {
+			markdownDescription: localize('terminal.integrated.stickyScroll.enabled', "Shows the current command at the top of the terminal."),
+			type: 'boolean',
+			default: product.quality !== 'stable'
+		},
+		[TerminalSettingId.StickyScrollMaxLineCount]: {
+			markdownDescription: localize('terminal.integrated.stickyScroll.maxLineCount', "Defines the maximum number of sticky lines to show. Sticky scroll lines will never exceed 40% of the viewport regardless of this setting."),
+			type: 'number',
+			default: 5,
+			minimum: 1,
+			maximum: 10
+		},
+		[TerminalSettingId.MouseWheelZoom]: {
+			markdownDescription: isMacintosh
+				? localize('terminal.integrated.mouseWheelZoom.mac', "Zoom the font of the terminal when using mouse wheel and holding `Cmd`.")
+				: localize('terminal.integrated.mouseWheelZoom', "Zoom the font of the terminal when using mouse wheel and holding `Ctrl`."),
+			type: 'boolean',
+			default: false
+		},
 	}
 };
 

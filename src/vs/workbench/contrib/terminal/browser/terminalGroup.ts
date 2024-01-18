@@ -5,7 +5,7 @@
 
 import { TERMINAL_VIEW_ID } from 'vs/workbench/contrib/terminal/common/terminal';
 import { Event, Emitter } from 'vs/base/common/event';
-import { IDisposable, Disposable, DisposableStore, dispose } from 'vs/base/common/lifecycle';
+import { IDisposable, Disposable, DisposableStore, dispose, toDisposable } from 'vs/base/common/lifecycle';
 import { SplitView, Orientation, IView, Sizing } from 'vs/base/browser/ui/splitview/splitview';
 import { IWorkbenchLayoutService, Parts, Position } from 'vs/workbench/services/layout/browser/layoutService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
@@ -13,7 +13,8 @@ import { ITerminalInstance, Direction, ITerminalGroup, ITerminalService, ITermin
 import { ViewContainerLocation, IViewDescriptorService } from 'vs/workbench/common/views';
 import { IShellLaunchConfig, ITerminalTabLayoutInfoById, TerminalLocation } from 'vs/platform/terminal/common/terminal';
 import { TerminalStatus } from 'vs/workbench/contrib/terminal/browser/terminalStatusList';
-import { getPartByLocation } from 'vs/workbench/browser/parts/views/viewsService';
+import { getWindow } from 'vs/base/browser/dom';
+import { getPartByLocation } from 'vs/workbench/services/views/browser/viewsService';
 
 const enum Constants {
 	/**
@@ -66,8 +67,11 @@ class SplitPaneContainer extends Disposable {
 		if ((isHorizontal && this.orientation !== Orientation.HORIZONTAL) ||
 			(!isHorizontal && this.orientation !== Orientation.VERTICAL)) {
 			// Resize the entire pane as a whole
-			if ((this.orientation === Orientation.HORIZONTAL && direction === Direction.Down) ||
-				(this.orientation === Orientation.VERTICAL && direction === Direction.Right)) {
+			if (
+				(this.orientation === Orientation.HORIZONTAL && direction === Direction.Down) ||
+				(part === Parts.SIDEBAR_PART && direction === Direction.Left) ||
+				(part === Parts.AUXILIARYBAR_PART && direction === Direction.Right)
+			) {
 				amount *= -1;
 			}
 
@@ -267,6 +271,7 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 	get terminalInstances(): ITerminalInstance[] { return this._terminalInstances; }
 
 	private _initialRelativeSizes: number[] | undefined;
+	private _visible: boolean = false;
 
 	private readonly _onDidDisposeInstance: Emitter<ITerminalInstance> = this._register(new Emitter<ITerminalInstance>());
 	readonly onDidDisposeInstance = this._onDidDisposeInstance.event;
@@ -300,6 +305,12 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 			this.attachToElement(this._container);
 		}
 		this._onPanelOrientationChanged.fire(this._terminalLocation === ViewContainerLocation.Panel && this._panelPosition === Position.BOTTOM ? Orientation.HORIZONTAL : Orientation.VERTICAL);
+		this._register(toDisposable(() => {
+			if (this._container && this._groupElement) {
+				this._container.removeChild(this._groupElement);
+				this._groupElement = undefined;
+			}
+		}));
 	}
 
 	addInstance(shellLaunchConfigOrInstance: IShellLaunchConfig | ITerminalInstance, parentTerminalId?: number): void {
@@ -328,13 +339,9 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 	}
 
 	override dispose(): void {
-		super.dispose();
-		if (this._container && this._groupElement) {
-			this._container.removeChild(this._groupElement);
-			this._groupElement = undefined;
-		}
 		this._terminalInstances = [];
 		this._onInstancesChanged.fire();
+		super.dispose();
 	}
 
 	get activeInstance(): ITerminalInstance | undefined {
@@ -481,10 +488,6 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 			const orientation = this._terminalLocation === ViewContainerLocation.Panel && this._panelPosition === Position.BOTTOM ? Orientation.HORIZONTAL : Orientation.VERTICAL;
 			this._splitPaneContainer = this._instantiationService.createInstance(SplitPaneContainer, this._groupElement, orientation);
 			this.terminalInstances.forEach(instance => this._splitPaneContainer!.split(instance, this._activeInstanceIndex + 1));
-			if (this._initialRelativeSizes) {
-				this.resizePanes(this._initialRelativeSizes);
-				this._initialRelativeSizes = undefined;
-			}
 		}
 	}
 
@@ -518,6 +521,7 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 	}
 
 	setVisible(visible: boolean): void {
+		this._visible = visible;
 		if (this._groupElement) {
 			this._groupElement.style.display = visible ? '' : 'none';
 		}
@@ -549,6 +553,10 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 				this._onPanelOrientationChanged.fire(this._splitPaneContainer.orientation);
 			}
 			this._splitPaneContainer.layout(width, height);
+			if (this._initialRelativeSizes && this._visible) {
+				this.resizePanes(this._initialRelativeSizes);
+				this._initialRelativeSizes = undefined;
+			}
 		}
 	}
 
@@ -568,7 +576,7 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 		}
 
 		const isHorizontal = (direction === Direction.Left || direction === Direction.Right);
-		const font = this._terminalService.configHelper.getFont();
+		const font = this._terminalService.configHelper.getFont(getWindow(this._groupElement));
 		// TODO: Support letter spacing and line height
 		const charSize = (isHorizontal ? font.charWidth : font.charHeight);
 		if (charSize) {
