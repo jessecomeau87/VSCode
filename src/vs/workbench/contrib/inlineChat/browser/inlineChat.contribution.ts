@@ -3,22 +3,25 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { registerAction2 } from 'vs/platform/actions/common/actions';
 import { EditorContributionInstantiation, registerEditorContribution } from 'vs/editor/browser/editorExtensions';
+import { registerAction2 } from 'vs/platform/actions/common/actions';
 import { InlineChatController } from 'vs/workbench/contrib/inlineChat/browser/inlineChatController';
 import * as InlineChatActions from 'vs/workbench/contrib/inlineChat/browser/inlineChatActions';
 import { IInlineChatService, INLINE_CHAT_ID, INTERACTIVE_EDITOR_ACCESSIBILITY_HELP_ID } from 'vs/workbench/contrib/inlineChat/common/inlineChat';
 import { InstantiationType, registerSingleton } from 'vs/platform/instantiation/common/extensions';
 import { InlineChatServiceImpl } from 'vs/workbench/contrib/inlineChat/common/inlineChatServiceImpl';
-import { InlineChatSessionServiceImpl } from './inlineChatSessionServiceImpl';
-import { IInlineChatSessionService } from './inlineChatSessionService';
 import { Registry } from 'vs/platform/registry/common/platform';
 import { LifecyclePhase } from 'vs/workbench/services/lifecycle/common/lifecycle';
 import { InlineChatNotebookContribution } from 'vs/workbench/contrib/inlineChat/browser/inlineChatNotebook';
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from 'vs/workbench/common/contributions';
-import { InlineChatAccessibleViewContribution } from './inlineChatAccessibleView';
 import { InlineChatSavingServiceImpl } from 'vs/workbench/contrib/inlineChat/browser/inlineChatSavingServiceImpl';
-import { IInlineChatSavingService } from './inlineChatSavingService';
+import { InlineChatAccessibleViewContribution } from 'vs/workbench/contrib/inlineChat/browser/inlineChatAccessibleView';
+import { IInlineChatSavingService } from 'vs/workbench/contrib/inlineChat/browser/inlineChatSavingService';
+import { IInlineChatSessionService } from 'vs/workbench/contrib/inlineChat/browser/inlineChatSessionService';
+import { InlineChatSessionServiceImpl } from 'vs/workbench/contrib/inlineChat/browser/inlineChatSessionServiceImpl';
+
+
+// --- browser
 
 registerSingleton(IInlineChatService, InlineChatServiceImpl, InstantiationType.Delayed);
 registerSingleton(IInlineChatSessionService, InlineChatSessionServiceImpl, InstantiationType.Delayed);
@@ -30,7 +33,7 @@ registerEditorContribution(INTERACTIVE_EDITOR_ACCESSIBILITY_HELP_ID, InlineChatA
 registerAction2(InlineChatActions.StartSessionAction);
 registerAction2(InlineChatActions.CloseAction);
 registerAction2(InlineChatActions.ConfigureInlineChatAction);
-// registerAction2(InlineChatActions.UnstashSessionAction);
+registerAction2(InlineChatActions.UnstashSessionAction);
 registerAction2(InlineChatActions.MakeRequestAction);
 registerAction2(InlineChatActions.StopRequestAction);
 registerAction2(InlineChatActions.ReRunRequestAction);

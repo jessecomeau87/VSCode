@@ -29,6 +29,7 @@ import { CommentContextKeys } from 'vs/workbench/contrib/comments/common/comment
 import { ICommentThreadWidget } from 'vs/workbench/contrib/comments/common/commentThreadWidget';
 import { ICellRange } from 'vs/workbench/contrib/notebook/common/notebookRange';
 import { LayoutableEditor, MIN_EDITOR_HEIGHT, SimpleCommentEditor, calculateEditorHeight } from './simpleCommentEditor';
+import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 
 const COMMENT_SCHEME = 'comment';
 let INMEM_MODEL_ID = 0;
@@ -63,7 +64,8 @@ export class CommentReply<T extends IRange | ICellRange> extends Disposable {
 		@ILanguageService private languageService: ILanguageService,
 		@IModelService private modelService: IModelService,
 		@IThemeService private themeService: IThemeService,
-		@IConfigurationService configurationService: IConfigurationService
+		@IConfigurationService configurationService: IConfigurationService,
+		@IKeybindingService private keybindingService: IKeybindingService
 	) {
 		super();
 
@@ -231,11 +233,20 @@ export class CommentReply<T extends IRange | ICellRange> extends Disposable {
 
 	private createTextModelListener(commentEditor: ICodeEditor, commentForm: HTMLElement) {
 		this._commentThreadDisposables.push(commentEditor.onDidFocusEditorWidget(() => {
-			this._commentThread.input = {
-				uri: commentEditor.getModel()!.uri,
-				value: commentEditor.getValue()
-			};
-			this.commentService.setActiveCommentThread(this._commentThread);
+			// Add a setTimeout so that the blur event doesn't fire before the focus event
+			// https://github.com/microsoft/vscode/blob/f6d945edbdc1b2e8a176624fdf612bb61468944f/src/vs/base/browser/dom.ts#L1322-L1328
+			setTimeout(() => {
+				this._commentThread.input = {
+					uri: commentEditor.getModel()!.uri,
+					value: commentEditor.getValue()
+				};
+				this.commentService.setActiveEditingCommentThread(this._commentThread);
+				this.commentService.setActiveCommentAndThread(this.owner, { thread: this._commentThread });
+			}, 0);
+		}));
+
+		this._commentThreadDisposables.push(commentEditor.onDidBlurEditorWidget(() => {
+			this.commentService.setActiveCommentAndThread(this.owner, undefined);
 		}));
 
 		this._commentThreadDisposables.push(commentEditor.getModel()!.onDidChangeContent(() => {
@@ -245,7 +256,7 @@ export class CommentReply<T extends IRange | ICellRange> extends Disposable {
 				newInput.value = modelContent;
 				this._commentThread.input = newInput;
 			}
-			this.commentService.setActiveCommentThread(this._commentThread);
+			this.commentService.setActiveEditingCommentThread(this._commentThread);
 		}));
 
 		this._commentThreadDisposables.push(this._commentThread.onDidChangeInput(input => {
@@ -283,7 +294,7 @@ export class CommentReply<T extends IRange | ICellRange> extends Disposable {
 			this._commentFormActions.setActions(menu);
 		}));
 
-		this._commentFormActions = new CommentFormActions(container, async (action: IAction) => {
+		this._commentFormActions = new CommentFormActions(this.keybindingService, this._contextKeyService, container, async (action: IAction) => {
 			await this._actionRunDelegate?.();
 
 			await action.run({
@@ -306,7 +317,7 @@ export class CommentReply<T extends IRange | ICellRange> extends Disposable {
 			this._commentEditorActions.setActions(editorMenu);
 		}));
 
-		this._commentEditorActions = new CommentFormActions(container, async (action: IAction) => {
+		this._commentEditorActions = new CommentFormActions(this.keybindingService, this._contextKeyService, container, async (action: IAction) => {
 			this._actionRunDelegate?.();
 
 			action.run({

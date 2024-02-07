@@ -594,6 +594,13 @@ export class StandaloneKeybindingService extends AbstractKeybindingService {
 	public registerSchemaContribution(contribution: KeybindingsSchemaContribution): void {
 		// noop
 	}
+
+	/**
+	 * not yet supported
+	 */
+	public override enableKeybindingHoldMode(commandId: string): Promise<void> | undefined {
+		return undefined;
+	}
 }
 
 class DomNodeListeners extends Disposable {
@@ -1067,6 +1074,10 @@ class StandaloneAudioService implements IAudioCueService {
 	}
 
 	onEnabledChanged(cue: AudioCue): Event<void> {
+		return Event.None;
+	}
+
+	onAlertEnabledChanged(cue: AudioCue): Event<void> {
 		return Event.None;
 	}
 
