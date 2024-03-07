@@ -7,7 +7,7 @@ import { localize } from 'vs/nls';
 import { ContextKeyExpr, RawContextKey } from 'vs/platform/contextkey/common/contextkey';
 import { ICommandHandler } from 'vs/platform/commands/common/commands';
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
-import { IQuickInputService } from 'vs/platform/quickinput/common/quickInput';
+import { IQuickInputService, QuickInputListFocus } from 'vs/platform/quickinput/common/quickInput';
 import { getIEditor } from 'vs/editor/browser/editorBrowser';
 import { ICodeEditorViewState, IDiffEditorViewState } from 'vs/editor/common/editorCommon';
 import { EditorInput } from 'vs/workbench/common/editor/editorInput';
@@ -40,7 +40,7 @@ export interface IWorkbenchQuickAccessConfiguration {
 	};
 }
 
-export function getQuickNavigateHandler(id: string, next?: boolean): ICommandHandler {
+export function getQuickNavigateHandler(id: string, focusType: QuickInputListFocus): ICommandHandler {
 	return accessor => {
 		const keybindingService = accessor.get(IKeybindingService);
 		const quickInputService = accessor.get(IQuickInputService);
@@ -48,7 +48,7 @@ export function getQuickNavigateHandler(id: string, next?: boolean): ICommandHan
 		const keys = keybindingService.lookupKeybindings(id);
 		const quickNavigate = { keybindings: keys };
 
-		quickInputService.navigate(!!next, quickNavigate);
+		quickInputService.navigate(focusType, quickNavigate);
 	};
 }
 export class EditorViewState {

@@ -16,9 +16,9 @@ import { Disposable, DisposableStore, dispose } from 'vs/base/common/lifecycle';
 import Severity from 'vs/base/common/severity';
 import { isString } from 'vs/base/common/types';
 import { localize } from 'vs/nls';
-import { IInputBox, IInputOptions, IKeyMods, IPickOptions, IQuickInput, IQuickInputButton, IQuickNavigateConfiguration, IQuickPick, IQuickPickItem, IQuickWidget, QuickInputHideReason, QuickPickInput } from 'vs/platform/quickinput/common/quickInput';
+import { IInputBox, IInputOptions, IKeyMods, IPickOptions, IQuickInput, IQuickInputButton, IQuickNavigateConfiguration, IQuickPick, IQuickPickItem, IQuickWidget, QuickInputHideReason, QuickInputListFocus, QuickPickInput } from 'vs/platform/quickinput/common/quickInput';
 import { QuickInputBox } from 'vs/platform/quickinput/browser/quickInputBox';
-import { QuickInputList, QuickInputListFocus } from 'vs/platform/quickinput/browser/quickInputList';
+import { QuickInputList } from 'vs/platform/quickinput/browser/quickInputList';
 import { QuickInputUI, Writeable, IQuickInputStyles, IQuickInputOptions, QuickPick, backButton, InputBox, Visibilities, QuickWidget } from 'vs/platform/quickinput/browser/quickInput';
 import { ILayoutService } from 'vs/platform/layout/browser/layoutService';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
@@ -655,9 +655,9 @@ export class QuickInputController extends Disposable {
 		}
 	}
 
-	navigate(next: boolean, quickNavigate?: IQuickNavigateConfiguration) {
+	navigate(focusType: QuickInputListFocus, quickNavigate?: IQuickNavigateConfiguration) {
 		if (this.isVisible() && this.getUI().list.isDisplayed()) {
-			this.getUI().list.focus(next ? QuickInputListFocus.Next : QuickInputListFocus.Previous);
+			this.getUI().list.focus(focusType);
 			if (quickNavigate && this.controller instanceof QuickPick) {
 				this.controller.quickNavigate = quickNavigate;
 			}
@@ -764,4 +764,3 @@ export class QuickInputController extends Disposable {
 	}
 }
 export interface IQuickInputControllerHost extends ILayoutService { }
-

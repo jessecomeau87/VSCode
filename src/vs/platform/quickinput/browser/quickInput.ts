@@ -26,9 +26,9 @@ import Severity from 'vs/base/common/severity';
 import { ThemeIcon } from 'vs/base/common/themables';
 import 'vs/css!./media/quickInput';
 import { localize } from 'vs/nls';
-import { IInputBox, IKeyMods, IQuickInput, IQuickInputButton, IQuickInputHideEvent, IQuickInputToggle, IQuickNavigateConfiguration, IQuickPick, IQuickPickDidAcceptEvent, IQuickPickItem, IQuickPickItemButtonEvent, IQuickPickSeparator, IQuickPickSeparatorButtonEvent, IQuickPickWillAcceptEvent, IQuickWidget, ItemActivation, NO_KEY_MODS, QuickInputHideReason } from 'vs/platform/quickinput/common/quickInput';
+import { IInputBox, IKeyMods, IQuickInput, IQuickInputButton, IQuickInputHideEvent, IQuickInputToggle, IQuickNavigateConfiguration, IQuickPick, IQuickPickDidAcceptEvent, IQuickPickItem, IQuickPickItemButtonEvent, IQuickPickSeparator, IQuickPickSeparatorButtonEvent, IQuickPickWillAcceptEvent, IQuickWidget, ItemActivation, NO_KEY_MODS, QuickInputHideReason, QuickInputListFocus } from 'vs/platform/quickinput/common/quickInput';
 import { QuickInputBox } from './quickInputBox';
-import { QuickInputList, QuickInputListFocus } from './quickInputList';
+import { QuickInputList } from './quickInputList';
 import { quickInputButtonToAction, renderQuickInputDescription } from './quickInputUtils';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { IHoverOptions, IHoverService, WorkbenchHoverDelegate } from 'vs/platform/hover/browser/hover';
@@ -826,70 +826,6 @@ export class QuickPick<T extends IQuickPickItem> extends QuickInput implements I
 				this.ui.inputBox.onDidChange(value => {
 					this.doSetValue(value, true /* skip update since this originates from the UI */);
 				}));
-			this.visibleDisposables.add((this._hideInput ? this.ui.list : this.ui.inputBox).onKeyDown((event: KeyboardEvent | StandardKeyboardEvent) => {
-				switch (event.keyCode) {
-					case KeyCode.DownArrow:
-						this.ui.list.focus(QuickInputListFocus.Next);
-						if (this.canSelectMany) {
-							this.ui.list.domFocus();
-						}
-						dom.EventHelper.stop(event, true);
-						break;
-					case KeyCode.UpArrow:
-						if (this.ui.list.getFocusedElements().length) {
-							this.ui.list.focus(QuickInputListFocus.Previous);
-						} else {
-							this.ui.list.focus(QuickInputListFocus.Last);
-						}
-						if (this.canSelectMany) {
-							this.ui.list.domFocus();
-						}
-						dom.EventHelper.stop(event, true);
-						break;
-					case KeyCode.PageDown:
-						this.ui.list.focus(QuickInputListFocus.NextPage);
-						if (this.canSelectMany) {
-							this.ui.list.domFocus();
-						}
-						dom.EventHelper.stop(event, true);
-						break;
-					case KeyCode.PageUp:
-						this.ui.list.focus(QuickInputListFocus.PreviousPage);
-						if (this.canSelectMany) {
-							this.ui.list.domFocus();
-						}
-						dom.EventHelper.stop(event, true);
-						break;
-					case KeyCode.RightArrow:
-						if (!this._canAcceptInBackground) {
-							return; // needs to be enabled
-						}
-
-						if (!this.ui.inputBox.isSelectionAtEnd()) {
-							return; // ensure input box selection at end
-						}
-
-						if (this.activeItems[0]) {
-							this._selectedItems = [this.activeItems[0]];
-							this.onDidChangeSelectionEmitter.fire(this.selectedItems);
-							this.handleAccept(true);
-						}
-
-						break;
-					case KeyCode.Home:
-						if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
-							this.ui.list.focus(QuickInputListFocus.First);
-							dom.EventHelper.stop(event, true);
-						}
-						break;
-					case KeyCode.End:
-						if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
-							this.ui.list.focus(QuickInputListFocus.Last);
-							dom.EventHelper.stop(event, true);
-						}
-						break;
-				}
-			}));
 			this.visibleDisposables.add(this.ui.onDidAccept(() => {
 				if (this.canSelectMany) {
 					// if there are no checked elements, it means that an onDidChangeSelection never fired to overwrite
