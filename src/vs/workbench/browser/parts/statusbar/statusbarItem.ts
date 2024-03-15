@@ -21,9 +21,9 @@ import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
 import { KeyCode } from 'vs/base/common/keyCodes';
 import { renderIcon, renderLabelWithIcons } from 'vs/base/browser/ui/iconLabel/iconLabels';
 import { spinningLoading, syncing } from 'vs/platform/theme/common/iconRegistry';
-import { ICustomHover, setupCustomHover } from 'vs/base/browser/ui/iconLabel/iconLabelHover';
+import { ICustomHover, setupCustomHover } from 'vs/base/browser/ui/hover/updatableHoverWidget';
 import { isMarkdownString, markdownStringEqual } from 'vs/base/common/htmlContent';
-import { IHoverDelegate } from 'vs/base/browser/ui/iconLabel/iconHoverDelegate';
+import { IHoverDelegate } from 'vs/base/browser/ui/hover/hoverDelegate';
 import { Gesture, EventType as TouchEventType } from 'vs/base/browser/touch';
 
 export class StatusbarEntryItem extends Disposable {
@@ -73,7 +73,7 @@ export class StatusbarEntryItem extends Disposable {
 		this._register(Gesture.addTarget(this.labelContainer)); // enable touch
 
 		// Label (with support for progress)
-		this.label = new StatusBarCodiconLabel(this.labelContainer);
+		this.label = this._register(new StatusBarCodiconLabel(this.labelContainer));
 		this.container.appendChild(this.labelContainer);
 
 		// Beak Container
@@ -117,22 +117,21 @@ export class StatusbarEntryItem extends Disposable {
 		// Update: Hover
 		if (!this.entry || !this.isEqualTooltip(this.entry, entry)) {
 			const hoverContents = isMarkdownString(entry.tooltip) ? { markdown: entry.tooltip, markdownNotSupportedFallback: undefined } : entry.tooltip;
-			const entryOpensTooltip = entry.command === ShowTooltipCommand;
 			if (this.hover) {
-				this.hover.update(hoverContents, { disableHideOnClick: entryOpensTooltip });
+				this.hover.update(hoverContents);
 			} else {
-				this.hover = this._register(setupCustomHover(this.hoverDelegate, this.container, hoverContents, { disableHideOnClick: entryOpensTooltip }));
+				this.hover = this._register(setupCustomHover(this.hoverDelegate, this.container, hoverContents));
 			}
-			this.focusListener.value = addDisposableListener(this.labelContainer, EventType.FOCUS, (e) => {
-				EventHelper.stop(e);
-				this.hover?.show(false);
-			});
-			this.focusOutListener.value = addDisposableListener(this.labelContainer, EventType.FOCUS_OUT, (e) => {
-				EventHelper.stop(e);
-				if (!entryOpensTooltip) {
+			if (entry.command !== ShowTooltipCommand /* prevents flicker on click */) {
+				this.focusListener.value = addDisposableListener(this.labelContainer, EventType.FOCUS, e => {
+					EventHelper.stop(e);
+					this.hover?.show(false);
+				});
+				this.focusOutListener.value = addDisposableListener(this.labelContainer, EventType.FOCUS_OUT, e => {
+					EventHelper.stop(e);
 					this.hover?.hide();
-				}
-			});
+				});
+			}
 		}
 
 		// Update: Command

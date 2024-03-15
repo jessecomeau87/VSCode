@@ -605,12 +605,18 @@ suite('ExtHost Testing', () => {
 		let dto: TestRunDto;
 		const ext: IRelaxedExtensionDescription = {} as any;
 
+		teardown(() => {
+			for (const { id } of c.trackers) {
+				c.disposeTestRun(id);
+			}
+		});
+
 		setup(async () => {
 			proxy = mockObject<MainThreadTestingShape>()();
 			cts = new CancellationTokenSource();
 			c = new TestRunCoordinator(proxy, new NullLogService());
 
-			configuration = new TestRunProfileImpl(mockObject<MainThreadTestingShape>()(), new Map(), nullExtensionDescription, new Set(), Event.None, 'ctrlId', 42, 'Do Run', TestRunProfileKind.Run, () => { }, false);
+			configuration = new TestRunProfileImpl(mockObject<MainThreadTestingShape>()(), new Map(), new Set(), Event.None, 'ctrlId', 42, 'Do Run', TestRunProfileKind.Run, () => { }, false);
 
 			await single.expand(single.root.id, Infinity);
 			single.collectDiff();
@@ -631,7 +637,7 @@ suite('ExtHost Testing', () => {
 		});
 
 		test('tracks a run started from a main thread request', () => {
-			const tracker = ds.add(c.prepareForMainThreadTestRun(req, dto, ext, cts.token));
+			const tracker = ds.add(c.prepareForMainThreadTestRun(req, dto, ext, configuration, cts.token));
 			assert.strictEqual(tracker.hasRunningTasks, false);
 
 			const task1 = c.createTestRun(ext, 'ctrl', single, req, 'run1', true);
@@ -656,7 +662,7 @@ suite('ExtHost Testing', () => {
 		test('run cancel force ends after a timeout', () => {
 			const clock = sinon.useFakeTimers();
 			try {
-				const tracker = ds.add(c.prepareForMainThreadTestRun(req, dto, ext, cts.token));
+				const tracker = ds.add(c.prepareForMainThreadTestRun(req, dto, ext, configuration, cts.token));
 				const task = c.createTestRun(ext, 'ctrl', single, req, 'run1', true);
 				const onEnded = sinon.stub();
 				ds.add(tracker.onEnd(onEnded));
@@ -681,7 +687,7 @@ suite('ExtHost Testing', () => {
 		});
 
 		test('run cancel force ends on second cancellation request', () => {
-			const tracker = ds.add(c.prepareForMainThreadTestRun(req, dto, ext, cts.token));
+			const tracker = ds.add(c.prepareForMainThreadTestRun(req, dto, ext, configuration, cts.token));
 			const task = c.createTestRun(ext, 'ctrl', single, req, 'run1', true);
 			const onEnded = sinon.stub();
 			ds.add(tracker.onEnd(onEnded));
@@ -803,7 +809,7 @@ suite('ExtHost Testing', () => {
 					contextValue: undefined,
 					expected: undefined,
 					actual: undefined,
-					location: convert.location.from({ uri: test2.uri!, range: test2.range! }),
+					location: convert.location.from({ uri: test2.uri!, range: test2.range }),
 				}]
 			]);
 
