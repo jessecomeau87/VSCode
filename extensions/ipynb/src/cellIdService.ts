@@ -7,6 +7,7 @@ import { ExtensionContext, NotebookDocument, NotebookDocumentChangeEvent, Notebo
 import { getCellMetadata } from './serializers';
 import { CellMetadata } from './common';
 import { getNotebookMetadata } from './notebookSerializer';
+import { JupyterNotebookType } from './constants';
 import type * as nbformat from '@jupyterlab/nbformat';
 
 /**
@@ -17,8 +18,11 @@ export function ensureAllNewCellsHaveCellIds(context: ExtensionContext) {
 	workspace.onDidChangeNotebookDocument(onDidChangeNotebookCells, undefined, context.subscriptions);
 }
 
-function onDidChangeNotebookCells(e: NotebookDocumentChangeEvent) {
-	const nbMetadata = getNotebookMetadata(e.notebook);
+function onDidChangeNotebookCells(e: NotebookCellsChangeEvent) {
+	if (e.document.notebookType !== JupyterNotebookType) {
+		return;
+	}
+	const nbMetadata = getNotebookMetadata(e.document);
 	if (!isCellIdRequired(nbMetadata)) {
 		return;
 	}
