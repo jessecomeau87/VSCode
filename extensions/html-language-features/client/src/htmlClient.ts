@@ -11,12 +11,12 @@ import {
 } from 'vscode';
 import {
 	LanguageClientOptions, RequestType, DocumentRangeFormattingParams,
-	DocumentRangeFormattingRequest, ProvideCompletionItemsSignature, TextDocumentIdentifier, RequestType0, Range as LspRange, Position as LspPosition, NotificationType, BaseLanguageClient
+	DocumentRangeFormattingRequest, ProvideCompletionItemsSignature, TextDocumentIdentifier, RequestType0, Range as LspRange, NotificationType, BaseLanguageClient
 } from 'vscode-languageclient';
-import { FileSystemProvider, serveFileSystemRequests } from './requests';
 import { getCustomDataSource } from './customData';
-import { activateAutoInsertion } from './autoInsertion';
+import { activateAutoInsertion, activateServerSys as serveFileSystemRequests } from '@volar/vscode';
 import { getLanguageParticipants, LanguageParticipants } from './languageParticipants';
+import { DiagnosticModel, type InitializationOptions } from '@volar/language-server';
 
 namespace CustomDataChangedNotification {
 	export const type: NotificationType<string[]> = new NotificationType('html/customDataChanged');
@@ -24,25 +24,6 @@ namespace CustomDataChangedNotification {
 
 namespace CustomDataContent {
 	export const type: RequestType<string, string, any> = new RequestType('html/customDataContent');
-}
-
-interface AutoInsertParams {
-	/**
-	 * The auto insert kind
-	 */
-	kind: 'autoQuote' | 'autoClose';
-	/**
-	 * The text document.
-	 */
-	textDocument: TextDocumentIdentifier;
-	/**
-	 * The position inside the text document.
-	 */
-	position: LspPosition;
-}
-
-namespace AutoInsertRequest {
-	export const type: RequestType<AutoInsertParams, string, any> = new RequestType('html/autoInsert');
 }
 
 // experimental: semantic tokens
@@ -77,7 +58,6 @@ export const languageServerDescription = l10n.t('HTML Language Server');
 
 export interface Runtime {
 	TextDecoder: { new(encoding?: string): { decode(buffer: ArrayBuffer): string } };
-	fileFs?: FileSystemProvider;
 	telemetry?: TelemetryReporter;
 	readonly timer: {
 		setTimeout(callback: (...args: any[]) => void, ms: number, ...args: any[]): Disposable;
@@ -158,11 +138,19 @@ async function startClientWithParticipants(languageParticipants: LanguagePartici
 			configurationSection: ['html', 'css', 'javascript', 'js/ts'], // the settings to synchronize
 		},
 		initializationOptions: {
+			// volar options
+			diagnosticModel: DiagnosticModel.Pull,
+			semanticTokensLegend: {
+				// fill missing modifiers from standard modifiers
+				tokenModifiers: ['local'],
+				tokenTypes: [],
+			},
+
+			// html options
 			embeddedLanguages,
 			handledSchemas: ['file'],
-			provideFormatter: false, // tell the server to not provide formatting capability and ignore the `html.format.enable` setting.
 			customCapabilities: { rangeFormatting: { editLimit: 10000 } }
-		},
+		} satisfies InitializationOptions & Record<string, any>,
 		middleware: {
 			// testing the replace / insert mode
 			provideCompletionItem(document: TextDocument, position: Position, context: CompletionContext, token: CancellationToken, next: ProvideCompletionItemsSignature): ProviderResult<CompletionItem[] | CompletionList> {
@@ -196,7 +184,7 @@ async function startClientWithParticipants(languageParticipants: LanguagePartici
 
 	await client.start();
 
-	toDispose.push(serveFileSystemRequests(client, runtime));
+	toDispose.push(serveFileSystemRequests(client));
 
 	const customDataSource = getCustomDataSource(runtime, toDispose);
 
@@ -207,16 +195,7 @@ async function startClientWithParticipants(languageParticipants: LanguagePartici
 	toDispose.push(client.onRequest(CustomDataContent.type, customDataSource.getContent));
 
 
-	const insertRequestor = (kind: 'autoQuote' | 'autoClose', document: TextDocument, position: Position): Promise<string> => {
-		const param: AutoInsertParams = {
-			kind,
-			textDocument: client.code2ProtocolConverter.asTextDocumentIdentifier(document),
-			position: client.code2ProtocolConverter.asPosition(position)
-		};
-		return client.sendRequest(AutoInsertRequest.type, param);
-	};
-
-	const disposable = activateAutoInsertion(insertRequestor, languageParticipants, runtime);
+	const disposable = activateAutoInsertion(languageParticipants.documentSelector, client);
 	toDispose.push(disposable);
 
 	const disposable2 = client.onTelemetry(e => {

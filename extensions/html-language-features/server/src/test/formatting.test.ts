@@ -5,21 +5,13 @@
 import 'mocha';
 import * as path from 'path';
 import * as fs from 'fs';
-
 import * as assert from 'assert';
-import { getLanguageModes, TextDocument, Range, FormattingOptions, ClientCapabilities } from '../modes/languageModes';
-
-import { format } from '../modes/formatting';
-import { getNodeFileFS } from '../node/nodeFs';
+import { getTestService } from './shared';
+import { FormattingOptions, Range, TextDocument } from '@volar/language-server';
 
 suite('HTML Embedded Formatting', () => {
 
-	async function assertFormat(value: string, expected: string, options?: any, formatOptions?: FormattingOptions, message?: string): Promise<void> {
-		const workspace = {
-			settings: options,
-			folders: [{ name: 'foo', uri: 'test://foo' }]
-		};
-		const languageModes = getLanguageModes({ css: true, javascript: true }, workspace, ClientCapabilities.LATEST, getNodeFileFS());
+	async function assertFormat(value: string, expected: string, _options?: any, formatOptions?: FormattingOptions, message?: string): Promise<void> {
 
 		let rangeStartOffset = value.indexOf('|');
 		let rangeEndOffset;
@@ -32,15 +24,14 @@ suite('HTML Embedded Formatting', () => {
 			rangeStartOffset = 0;
 			rangeEndOffset = value.length;
 		}
-		const document = TextDocument.create('test://test/test.html', 'html', 0, value);
+		const { languageService, document } = await getTestService({ content: value });
 		const range = Range.create(document.positionAt(rangeStartOffset), document.positionAt(rangeEndOffset));
 		if (!formatOptions) {
 			formatOptions = FormattingOptions.create(2, true);
 		}
 
-		const result = await format(languageModes, document, range, formatOptions, undefined, { css: true, javascript: true });
-
-		const actual = TextDocument.applyEdits(document, result);
+		const result = await languageService.format(document.uri, formatOptions, range, undefined);
+		const actual = TextDocument.applyEdits(document, result ?? []);
 		assert.strictEqual(actual, expected, message);
 	}
 
@@ -88,15 +79,15 @@ suite('HTML Embedded Formatting', () => {
 		const options: FormattingOptions = FormattingOptions.create(2, true);
 		options.insertFinalNewline = true;
 
-		await assertFormat('<html><body><p>Hello</p></body></html>', '<html>\n\n<body>\n  <p>Hello</p>\n</body>\n\n</html>\n', {}, options);
-		await assertFormat('<html>|<body><p>Hello</p></body>|</html>', '<html><body>\n  <p>Hello</p>\n</body></html>', {}, options);
-		await assertFormat('<html>|<body><p>Hello</p></body></html>|', '<html><body>\n  <p>Hello</p>\n</body>\n\n</html>\n', {}, options);
-		await assertFormat('<html><head><script>\nvar x=1;\n</script></head></html>', '<html>\n\n<head>\n  <script>\n    var x = 1;\n  </script>\n</head>\n\n</html>\n', {}, options);
+		await assertFormat('<html><body><p>Hello</p></body></html>', '<html>\n\n<body>\n  <p>Hello</p>\n</body>\n\n</html>\n', undefined, options);
+		await assertFormat('<html>|<body><p>Hello</p></body>|</html>', '<html><body>\n  <p>Hello</p>\n</body></html>', undefined, options);
+		await assertFormat('<html>|<body><p>Hello</p></body></html>|', '<html><body>\n  <p>Hello</p>\n</body>\n\n</html>\n', undefined, options);
+		await assertFormat('<html><head><script>\nvar x=1;\n</script></head></html>', '<html>\n\n<head>\n  <script>\n    var x = 1;\n  </script>\n</head>\n\n</html>\n', undefined, options);
 	});
 
 	test('Inside script', async () => {
-		await assertFormat('<html><head>\n  <script>\n|var x=6;|\n</script></head></html>', '<html><head>\n  <script>\n  var x = 6;\n</script></head></html>');
-		await assertFormat('<html><head>\n  <script>\n|var x=6;\nvar y=  9;|\n</script></head></html>', '<html><head>\n  <script>\n  var x = 6;\n  var y = 9;\n</script></head></html>');
+		await assertFormat('<html><head>\n  <script>\n|var x=6;|\n</script></head></html>', '<html><head>\n  <script>\n    var x = 6;\n</script></head></html>');
+		await assertFormat('<html><head>\n  <script>\n|var x=6;\nvar y=  9;|\n</script></head></html>', '<html><head>\n  <script>\n    var x = 6;\n    var y = 9;\n</script></head></html>');
 	});
 
 	test('Range after new line', async () => {
