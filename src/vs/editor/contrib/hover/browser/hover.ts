@@ -48,7 +48,6 @@ interface IHoverState {
 	mouseDown: boolean;
 	// TODO @aiday-mar maybe not needed, investigate this
 	contentHoverFocused: boolean;
-	activatedByDecoratorClick: boolean;
 }
 
 export class HoverController extends Disposable implements IEditorContribution {
@@ -66,8 +65,7 @@ export class HoverController extends Disposable implements IEditorContribution {
 	private _hoverSettings!: IHoverSettings;
 	private _hoverState: IHoverState = {
 		mouseDown: false,
-		contentHoverFocused: false,
-		activatedByDecoratorClick: false
+		contentHoverFocused: false
 	};
 
 	constructor(
@@ -229,6 +227,12 @@ export class HoverController extends Disposable implements IEditorContribution {
 	private _onEditorMouseMove(mouseEvent: IEditorMouseEvent): void {
 
 		this._mouseMoveEvent = mouseEvent;
+		if (!this._hoverSettings.enabled) {
+			if (this._contentWidget?.isVisible) {
+				this._hideWidgets();
+			}
+			return;
+		}
 		if (this._contentWidget?.isFocused || this._contentWidget?.isResizing) {
 			return;
 		}
@@ -266,34 +270,18 @@ export class HoverController extends Disposable implements IEditorContribution {
 		if (!mouseEvent) {
 			return;
 		}
-
-		const target = mouseEvent.target;
-		const mouseOnDecorator = target.element?.classList.contains('colorpicker-color-decoration');
-		const decoratorActivatedOn = this._editor.getOption(EditorOption.colorDecoratorsActivatedOn);
-
-		const enabled = this._hoverSettings.enabled;
-		const activatedByDecoratorClick = this._hoverState.activatedByDecoratorClick;
-		if (
-			(
-				mouseOnDecorator && (
-					(decoratorActivatedOn === 'click' && !activatedByDecoratorClick) ||
-					(decoratorActivatedOn === 'hover' && !enabled && !_sticky) ||
-					(decoratorActivatedOn === 'clickAndHover' && !enabled && !activatedByDecoratorClick))
-			) || (
-				!mouseOnDecorator && !enabled && !activatedByDecoratorClick
-			)
-		) {
+		const contentWidget = this._getOrCreateContentWidget();
+		if (contentWidget.shouldHideHoverOnMouseEvent(mouseEvent)) {
 			this._hideWidgets();
 			return;
 		}
-
-		const contentWidget = this._getOrCreateContentWidget();
 
 		if (contentWidget.showsOrWillShow(mouseEvent)) {
 			this._glyphWidget?.hide();
 			return;
 		}
 
+		const target = mouseEvent.target;
 		if (target.type === MouseTargetType.GUTTER_GLYPH_MARGIN && target.position && target.detail.glyphMarginLane) {
 			this._contentWidget?.hide();
 			const glyphWidget = this._getOrCreateGlyphWidget();
@@ -358,7 +346,6 @@ export class HoverController extends Disposable implements IEditorContribution {
 		) {
 			return;
 		}
-		this._hoverState.activatedByDecoratorClick = false;
 		this._hoverState.contentHoverFocused = false;
 		this._glyphWidget?.hide();
 		this._contentWidget?.hide();
@@ -386,10 +373,8 @@ export class HoverController extends Disposable implements IEditorContribution {
 		range: Range,
 		mode: HoverStartMode,
 		source: HoverStartSource,
-		focus: boolean,
-		activatedByColorDecoratorClick: boolean = false
+		focus: boolean
 	): void {
-		this._hoverState.activatedByDecoratorClick = activatedByColorDecoratorClick;
 		this._getOrCreateContentWidget().startShowingAtRange(range, mode, source, focus);
 	}
 
