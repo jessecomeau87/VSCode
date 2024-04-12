@@ -44,7 +44,7 @@ function testIndentationToTabsCommand(lines: string[], selection: Selection, tab
 	testCommand(lines, null, selection, (accessor, sel) => new IndentationToTabsCommand(sel, tabSize), expectedLines, expectedSelection);
 }
 
-function registerLanguage(instantiationService: TestInstantiationService, languageId: string, language: Language, disposables: DisposableStore) {
+export function registerLanguage(instantiationService: TestInstantiationService, languageId: string, language: Language, disposables: DisposableStore) {
 	const languageService = instantiationService.get(ILanguageService);
 	registerLanguageConfiguration(instantiationService, languageId, language, disposables);
 	disposables.add(languageService.registerLanguage({ id: languageId }));

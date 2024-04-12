@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as assert from 'assert';
-import { DisposableStore } from 'vs/base/common/lifecycle';
+import { DisposableStore, IDisposable } from 'vs/base/common/lifecycle';
 import { ensureNoDisposablesAreLeakedInTestSuite } from 'vs/base/test/common/utils';
 import { ILanguageConfigurationService } from 'vs/editor/common/languages/languageConfigurationRegistry';
 import { getReindentEditOperations } from 'vs/editor/contrib/indentation/common/indentation';
@@ -15,6 +15,9 @@ import { TestInstantiationService } from 'vs/platform/instantiation/test/common/
 import { ILanguageConfiguration, LanguageConfigurationFileHandler } from 'vs/workbench/contrib/codeEditor/common/languageConfigurationExtensionPoint';
 import { parse } from 'vs/base/common/json';
 import { IRange } from 'vs/editor/common/core/range';
+import { ISingleEditOperation } from 'vs/editor/common/core/editOperation';
+import { trimTrailingWhitespace } from 'vs/editor/common/commands/trimTrailingWhitespaceCommand';
+import { execSync } from 'child_process';
 
 function getIRange(range: IRange): IRange {
 	return {
@@ -23,6 +26,21 @@ function getIRange(range: IRange): IRange {
 		endLineNumber: range.endLineNumber,
 		endColumn: range.endColumn
 	};
+}
+
+function registerLanguage(languageConfigurationService: ILanguageConfigurationService, languageId: string): IDisposable {
+	let configPath: string;
+	switch (languageId) {
+		case 'ts-test':
+			configPath = path.join('extensions', 'typescript-basics', 'language-configuration.json');
+			break;
+		default:
+			throw new Error('Unknown languageId');
+	}
+	const configString = fs.readFileSync(configPath).toString();
+	const config = <ILanguageConfiguration>parse(configString, []);
+	const configParsed = LanguageConfigurationFileHandler.extractValidConfig(languageId, config);
+	return languageConfigurationService.register(languageId, configParsed);
 }
 
 suite('Auto-Reindentation - TypeScript/JavaScript', () => {
@@ -37,11 +55,7 @@ suite('Auto-Reindentation - TypeScript/JavaScript', () => {
 		disposables = new DisposableStore();
 		instantiationService = createModelServices(disposables);
 		languageConfigurationService = instantiationService.get(ILanguageConfigurationService);
-		const configPath = path.join('extensions', 'typescript-basics', 'language-configuration.json');
-		const configString = fs.readFileSync(configPath).toString();
-		const config = <ILanguageConfiguration>parse(configString, []);
-		const configParsed = LanguageConfigurationFileHandler.extractValidConfig(languageId, config);
-		disposables.add(languageConfigurationService.register(languageId, configParsed));
+		disposables.add(registerLanguage(languageConfigurationService, languageId));
 	});
 
 	teardown(() => {
@@ -51,21 +65,126 @@ suite('Auto-Reindentation - TypeScript/JavaScript', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
 
 	// Test which can be ran to find cases of incorrect indentation...
-	test.skip('Find Cases of Incorrect Indentation', () => {
+	test.skip('Find Cases of Incorrect Indentation with the Reindent Lines Command', () => {
 
-		const filePath = path.join('..', 'TypeScript', 'src', 'server', 'utilities.ts');
-		const fileContents = fs.readFileSync(filePath).toString();
+		// ./scripts/test.sh --inspect --grep='Find Cases of Incorrect Indentation with the Reindent Lines Command' --timeout=15000
 
-		const model = disposables.add(instantiateTextModel(instantiationService, fileContents, languageId, options));
-		const editOperations = getReindentEditOperations(model, languageConfigurationService, 1, model.getLineCount());
-		model.applyEdits(editOperations);
+		function walkDirectoryAndReindent(directory: string, languageId: string) {
+			const files = fs.readdirSync(directory, { withFileTypes: true });
+			const directoriesToRecurseOn: string[] = [];
+			for (const file of files) {
+				if (file.isDirectory()) {
+					directoriesToRecurseOn.push(path.join(directory, file.name));
+				} else {
+					const filePathName = path.join(directory, file.name);
+					const fileExtension = path.extname(filePathName);
+					if (fileExtension !== '.ts') {
+						continue;
+					}
+					const fileContents = fs.readFileSync(filePathName).toString();
+					const modelOptions: IRelaxedTextModelCreationOptions = {
+						tabSize: 4,
+						insertSpaces: false
+					};
+					const model = disposables.add(instantiateTextModel(instantiationService, fileContents, languageId, modelOptions));
+					const lineCount = model.getLineCount();
+					const editOperations: ISingleEditOperation[] = [];
+					for (let line = 1; line <= lineCount - 1; line++) {
+						/*
+						NOTE: Uncomment in order to ignore incorrect JS DOC indentation
+						const lineContent = model.getLineContent(line);
+						const trimmedLineContent = lineContent.trim();
+						if (trimmedLineContent.length === 0 || trimmedLineContent.startsWith('*') || trimmedLineContent.startsWith('/*')) {
+							continue;
+						}
+						*/
+						const lineContent = model.getLineContent(line);
+						const trimmedLineContent = lineContent.trim();
+						if (trimmedLineContent.length === 0) {
+							continue;
+						}
+						const editOperation = getReindentEditOperations(model, languageConfigurationService, line, line + 1);
+						/*
+						NOTE: Uncomment in order to see actual incorrect indentation diff
+						model.applyEdits(editOperation);
+						*/
+						editOperations.push(...editOperation);
+					}
+					model.applyEdits(editOperations);
+					model.applyEdits(trimTrailingWhitespace(model, [], true));
+					fs.writeFileSync(filePathName, model.getValue());
+				}
+			}
+			for (const directory of directoriesToRecurseOn) {
+				walkDirectoryAndReindent(directory, languageId);
+			}
+		}
 
-		// save the files to disk
-		const initialFile = path.join('..', 'autoindent', 'initial.ts');
-		const finalFile = path.join('..', 'autoindent', 'final.ts');
-		fs.writeFileSync(initialFile, fileContents);
-		fs.writeFileSync(finalFile, model.getValue());
+		walkDirectoryAndReindent('/Users/aiday/Desktop/Test/vscode-test', 'ts-test');
+		const output = execSync('cd /Users/aiday/Desktop/Test/vscode-test && git diff --shortstat', { encoding: 'utf-8' });
+		console.log('\ngit diff --shortstat:\n', output);
 	});
+
+	/* Refine.
+	test('Find Cases of Incorrect Indentation with the onEnter Rules', () => {
+		function walkDirectoryAndReindent(directory: string, languageId: string) {
+			const files = fs.readdirSync(directory, { withFileTypes: true });
+			const directoriesFromWhichToContinue: string[] = [];
+			for (const file of files) {
+				if (file.isDirectory()) {
+					directoriesFromWhichToContinue.push(path.join(directory, file.name));
+				} else {
+					const pathName = path.join(directory, file.name);
+					const fileType = path.extname(pathName);
+					if (fileType !== '.ts') {
+						continue;
+					}
+					const fileContents = fs.readFileSync(pathName).toString();
+					const options: IRelaxedTextModelCreationOptions = {
+						tabSize: 4,
+						insertSpaces: false
+					};
+					const model = disposables.add(instantiateTextModel(instantiationService, fileContents, languageId, options));
+					withTestCodeEditor(model, { autoIndent: 'full' }, (editor, viewModel, instantiationService) => {
+						const languageConfigurationService = instantiationService.get(ILanguageConfigurationService);
+						disposables.add(registerLanguage(languageConfigurationService, languageId));
+
+						const lineCount = model.getLineCount();
+						const editOperations: ISingleEditOperation[] = [];
+						for (let line = 1; line <= lineCount - 1; line++) {
+							if (model.getLineContent(line).length === 0) {
+								continue;
+							}
+							const column = model.getLineMaxColumn(line);
+							const range = new Range(line, column, line, column);
+							const config = new CursorConfiguration(languageId, model.getOptions(), editor.getOptions(), languageConfigurationService);
+							const command: ICommand = TypeOperations.enter(config, model, false, range, file.name);
+							const editOperation = getEditOperation(model, command);
+
+							editOperation.forEach((op) => {
+								if (op.text) {
+									op.text = op.text?.substring(1);
+								}
+								const lineNumber = op.range.startLineNumber;
+								const nextLineNumber = lineNumber + 1;
+								const range = new Range(nextLineNumber, 1, nextLineNumber, model.getLineIndentColumn(nextLineNumber));
+								op.range = range;
+							})
+							editOperations.push(...editOperation);
+						}
+						model.applyEdits(editOperations);
+						model.applyEdits(trimTrailingWhitespace(model, [], true));
+						fs.writeFileSync(pathName, model.getValue());
+					});
+				}
+			}
+			for (const directory of directoriesFromWhichToContinue) {
+				walkDirectoryAndReindent(directory, languageId);
+			}
+		}
+		walkDirectoryAndReindent('/Users/aiday/Desktop/Test/vscode-test', 'ts-test');
+	});
+	*/
 
 	// Unit tests for increase and decrease indent patterns...
 
