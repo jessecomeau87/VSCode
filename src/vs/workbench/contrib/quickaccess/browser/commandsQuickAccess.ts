@@ -32,11 +32,12 @@ import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IWorkbenchQuickAccessConfiguration } from 'vs/workbench/browser/quickaccess';
 import { CHAT_OPEN_ACTION_ID } from 'vs/workbench/contrib/chat/browser/actions/chatActions';
 import { ASK_QUICK_QUESTION_ACTION_ID } from 'vs/workbench/contrib/chat/browser/actions/chatQuickInputActions';
-import { IChatAgentService } from 'vs/workbench/contrib/chat/common/chatAgents';
+import { ChatAgentLocation, IChatAgentService } from 'vs/workbench/contrib/chat/common/chatAgents';
 import { CommandInformationResult, IAiRelatedInformationService, RelatedInformationType } from 'vs/workbench/services/aiRelatedInformation/common/aiRelatedInformation';
 import { IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
 import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
+import { createKeybindingCommandQuery } from 'vs/workbench/services/preferences/browser/keybindingsEditorModel';
 import { IPreferencesService } from 'vs/workbench/services/preferences/common/preferences';
 
 export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAccessProvider {
@@ -125,17 +126,20 @@ export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAcce
 		return [
 			...this.getCodeEditorCommandPicks(),
 			...this.getGlobalCommandPicks()
-		].map(picks => ({
-			...picks,
-			buttons: [{
-				iconClass: ThemeIcon.asClassName(Codicon.gear),
-				tooltip: localize('configure keybinding', "Configure Keybinding"),
-			}],
-			trigger: (): TriggerAction => {
-				this.preferencesService.openGlobalKeybindingSettings(false, { query: `@command:${picks.commandId}` });
-				return TriggerAction.CLOSE_PICKER;
-			},
-		}));
+		].map(picks => {
+			const hasKeybinding = !!this.keybindingService.lookupKeybindings(picks.commandId);
+			return {
+				...picks,
+				buttons: [{
+					iconClass: ThemeIcon.asClassName(Codicon.gear),
+					tooltip: hasKeybinding ? localize('change keybinding', "Change Keybinding") : localize('configure keybinding', "Configure Keybinding"),
+				}],
+				trigger: (): TriggerAction => {
+					this.preferencesService.openGlobalKeybindingSettings(false, { query: createKeybindingCommandQuery(picks.commandId, picks.commandWhen) });
+					return TriggerAction.CLOSE_PICKER;
+				},
+			};
+		});
 	}
 
 	protected hasAdditionalCommandPicks(filter: string, token: CancellationToken): boolean {
@@ -172,7 +176,7 @@ export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAcce
 			});
 		}
 
-		const defaultAgent = this.chatAgentService.getDefaultAgent();
+		const defaultAgent = this.chatAgentService.getDefaultAgent(ChatAgentLocation.Panel);
 		if (defaultAgent) {
 			additionalPicks.push({
 				label: localize('askXInChat', "Ask {0}: {1}", defaultAgent.metadata.fullName, filter),
@@ -243,6 +247,7 @@ export class CommandsQuickAccessProvider extends AbstractEditorCommandsQuickAcce
 				: { value: metadataDescription, original: metadataDescription };
 			globalCommandPicks.push({
 				commandId: action.item.id,
+				commandWhen: action.item.precondition?.serialize(),
 				commandAlias,
 				label: stripIcons(label),
 				commandDescription,

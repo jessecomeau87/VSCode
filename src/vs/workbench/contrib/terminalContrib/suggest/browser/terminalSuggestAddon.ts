@@ -296,7 +296,8 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 		// TODO: What do frozen and auto do?
 		const xtermBox = this._screen!.getBoundingClientRect();
 		const panelBox = this._panel!.offsetParent!.getBoundingClientRect();
-		suggestWidget.showSuggestions(model, 0, false, false, {
+		suggestWidget.setCompletionModel(model);
+		suggestWidget.showSuggestions(0, false, false, {
 			left: (xtermBox.left - panelBox.left) + this._terminal.buffer.active.cursorX * dimensions.width,
 			top: (xtermBox.top - panelBox.top) + this._terminal.buffer.active.cursorY * dimensions.height,
 			height: dimensions.height
@@ -378,10 +379,10 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 	}
 
 	handleNonXtermData(data: string): void {
-		this._handleTerminalInput(data);
+		this._handleTerminalInput(data, true);
 	}
 
-	private _handleTerminalInput(data: string): void {
+	private _handleTerminalInput(data: string, nonUserInput?: boolean): void {
 		if (!this._terminal || !this._enableWidget || !this._terminalSuggestWidgetVisibleContextKey.get()) {
 			// HACK: Buffer any input to be evaluated when the completions come in, this is needed
 			// because conpty may "render" the completion request after input characters that
@@ -415,7 +416,7 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 			}
 		}
 		// Left
-		if (data === '\x1b[D') {
+		else if (data === '\x1b[D') {
 			// If left goes beyond where the completion was requested, hide
 			if (this._cursorIndexDelta > 0) {
 				handled = true;
@@ -424,10 +425,17 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 			}
 		}
 		// Right
-		if (data === '\x1b[C') {
+		else if (data === '\x1b[C') {
+			// If right requests beyond where the completion was requested (potentially accepting a shell completion), hide
+			if (this._additionalInput?.length !== this._cursorIndexDelta) {
+				handled = true;
+				this._cursorIndexDelta++;
+				handledCursorDelta++;
+			}
+		}
+		// Other CSI sequence (ignore)
+		else if (data.match(/^\x1b\[.+[a-z@\^`{\|}~]$/i)) {
 			handled = true;
-			this._cursorIndexDelta += 1;
-			handledCursorDelta++;
 		}
 		if (data.match(/^[a-z0-9]$/i)) {
 
@@ -448,7 +456,7 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 			}
 
 			// Hide and clear model if there are no more items
-			if ((this._suggestWidget as any)._completionModel?.items.length === 0) {
+			if (!this._suggestWidget?.hasCompletions() || !nonUserInput) {
 				this._additionalInput = undefined;
 				this.hideSuggestWidget();
 				// TODO: Don't request every time; refine completions
@@ -464,7 +472,8 @@ export class SuggestAddon extends Disposable implements ITerminalAddon, ISuggest
 			// TODO: What do frozen and auto do?
 			const xtermBox = this._screen!.getBoundingClientRect();
 			const panelBox = this._panel!.offsetParent!.getBoundingClientRect();
-			this._suggestWidget?.showSuggestions((this._suggestWidget as any)._completionModel, 0, false, false, {
+
+			this._suggestWidget?.showSuggestions(0, false, false, {
 				left: (xtermBox.left - panelBox.left) + (this._terminal.buffer.active.cursorX + handledCursorDelta) * dimensions.width,
 				top: (xtermBox.top - panelBox.top) + this._terminal.buffer.active.cursorY * dimensions.height,
 				height: dimensions.height
