@@ -33,6 +33,7 @@ import { IRawFileMatch2, ITextSearchResult, resultIsMatch } from 'vs/workbench/s
 import * as vscode from 'vscode';
 import { ExtHostWorkspaceShape, IRelativePatternDto, IWorkspaceData, MainContext, MainThreadMessageOptions, MainThreadMessageServiceShape, MainThreadWorkspaceShape } from './extHost.protocol';
 import { revive } from 'vs/base/common/marshalling';
+import { ExcludeSettingOptions, SearchIgnoreOptions } from 'vs/workbench/services/search/common/searchExtTypes';
 
 export interface IExtHostWorkspaceProvider {
 	getWorkspaceFolder2(uri: vscode.Uri, resolveParent?: boolean): Promise<vscode.WorkspaceFolder | undefined>;
@@ -460,9 +461,8 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 		return this._findFilesImpl(include, undefined, {
 			exclude: excludeString,
 			maxResults,
-			useDefaultExcludes: useFileExcludes,
-			useDefaultSearchExcludes: false,
-			useIgnoreFiles: false
+			excludeSettings: useFileExcludes ? ExcludeSettingOptions.filesExclude : ExcludeSettingOptions.none,
+			ignoreFilesToUse: SearchIgnoreOptions.none
 		}, token);
 	}
 
@@ -472,6 +472,94 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 		token: vscode.CancellationToken = CancellationToken.None): Promise<vscode.Uri[]> {
 		this._logService.trace(`extHostWorkspace#findFiles2: fileSearch, extension: ${extensionId.value}, entryPoint: findFiles2`);
 		return this._findFilesImpl(undefined, filePattern, options, token);
+	}
+
+	private _parseIgnoreFileSettings(options: vscode.FindFiles2Options): {
+		disregardLocalIgnoreFiles: boolean | undefined; // in this case, undefined means to use the value from settings.
+		disregardParentIgnoreFiles: boolean | undefined;
+		disregardGlobalIgnoreFiles: boolean | undefined;
+	} {
+
+		let disregardLocalIgnoreFiles: boolean | undefined = undefined;
+		let disregardParentIgnoreFiles: boolean | undefined = undefined;
+		let disregardGlobalIgnoreFiles: boolean | undefined = undefined;
+
+		if (options.ignoreFilesToUse) {
+			switch (options.ignoreFilesToUse) {
+				case SearchIgnoreOptions.none:
+					disregardLocalIgnoreFiles = true;
+					disregardParentIgnoreFiles = true;
+					disregardGlobalIgnoreFiles = true;
+					break;
+				case SearchIgnoreOptions.localOnly:
+					disregardLocalIgnoreFiles = false;
+					disregardParentIgnoreFiles = true;
+					disregardGlobalIgnoreFiles = true;
+					break;
+				case SearchIgnoreOptions.localAndFollowSettings:
+					disregardLocalIgnoreFiles = false;
+					break;
+				case SearchIgnoreOptions.localAndParent:
+					disregardLocalIgnoreFiles = false;
+					disregardParentIgnoreFiles = false;
+					disregardGlobalIgnoreFiles = true;
+					break;
+				case SearchIgnoreOptions.localAndGlobal:
+					disregardLocalIgnoreFiles = false;
+					disregardParentIgnoreFiles = true;
+					disregardGlobalIgnoreFiles = false;
+					break;
+				case SearchIgnoreOptions.all:
+					disregardLocalIgnoreFiles = false;
+					disregardParentIgnoreFiles = false;
+					disregardGlobalIgnoreFiles = false;
+					break;
+				default:
+					// SearchIgnoreOptions.followSettings also follows this
+					break;
+			}
+		} else {
+			// todo: remove once copilot chat moves off of deprecated options for ~1 month
+			disregardLocalIgnoreFiles = typeof options.useIgnoreFiles === 'boolean' ? !options.useIgnoreFiles : undefined;
+			disregardGlobalIgnoreFiles = typeof options.useGlobalIgnoreFiles === 'boolean' ? !options.useGlobalIgnoreFiles : undefined;
+			disregardParentIgnoreFiles = typeof options.useParentIgnoreFiles === 'boolean' ? !options.useParentIgnoreFiles : undefined;
+		}
+
+		return {
+			disregardLocalIgnoreFiles,
+			disregardParentIgnoreFiles,
+			disregardGlobalIgnoreFiles
+		};
+	}
+
+	private _parseShouldUseExcludeSetting(options: vscode.FindFiles2Options): {
+		disregardExcludeSettings: boolean;
+		disregardSearchExcludeSettings: boolean;
+	} {
+
+		let disregardExcludeSettings: boolean = false;
+		let disregardSearchExcludeSettings: boolean = false;
+
+		if (options.excludeSettings) {
+			switch (options.excludeSettings) {
+				case ExcludeSettingOptions.none:
+					disregardExcludeSettings = true;
+					disregardSearchExcludeSettings = true;
+					break;
+				case ExcludeSettingOptions.filesExclude:
+					disregardSearchExcludeSettings = true;
+					break;
+				default:
+					// includes the case for ExcludeSettingOptions.searchAndFilesExclude
+					break;
+			}
+		} else {
+			// todo: remove once copilot chat moves off of deprecated options for ~1 month
+			disregardExcludeSettings = typeof options.useDefaultExcludes === 'boolean' ? !options.useDefaultExcludes : false;
+			disregardSearchExcludeSettings = typeof options.useDefaultSearchExcludes === 'boolean' ? !options.useDefaultSearchExcludes : false;
+		}
+
+		return { disregardExcludeSettings, disregardSearchExcludeSettings };
 	}
 
 	private async _findFilesImpl(
@@ -488,13 +576,16 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 		const excludePattern = (typeof options.exclude === 'string') ? options.exclude :
 			options.exclude ? options.exclude.pattern : undefined;
 
+		const shouldUseExcludeSetting = this._parseShouldUseExcludeSetting(options);
+		const ignoreFileSettings = this._parseIgnoreFileSettings(options);
+
 		const fileQueries = <IFileQueryBuilderOptions>{
 			ignoreSymlinks: typeof options.followSymlinks === 'boolean' ? !options.followSymlinks : undefined,
-			disregardIgnoreFiles: typeof options.useIgnoreFiles === 'boolean' ? !options.useIgnoreFiles : undefined,
-			disregardGlobalIgnoreFiles: typeof options.useGlobalIgnoreFiles === 'boolean' ? !options.useGlobalIgnoreFiles : undefined,
-			disregardParentIgnoreFiles: typeof options.useParentIgnoreFiles === 'boolean' ? !options.useParentIgnoreFiles : undefined,
-			disregardExcludeSettings: typeof options.useDefaultExcludes === 'boolean' ? !options.useDefaultExcludes : false,
-			disregardSearchExcludeSettings: typeof options.useDefaultSearchExcludes === 'boolean' ? !options.useDefaultSearchExcludes : false,
+			disregardIgnoreFiles: ignoreFileSettings.disregardLocalIgnoreFiles,
+			disregardGlobalIgnoreFiles: ignoreFileSettings.disregardGlobalIgnoreFiles,
+			disregardParentIgnoreFiles: ignoreFileSettings.disregardParentIgnoreFiles,
+			disregardExcludeSettings: shouldUseExcludeSetting.disregardExcludeSettings,
+			disregardSearchExcludeSettings: shouldUseExcludeSetting.disregardSearchExcludeSettings,
 			maxResults: options.maxResults,
 			excludePattern: excludePattern,
 			shouldGlobSearch: typeof options.fuzzy === 'boolean' ? !options.fuzzy : true,
