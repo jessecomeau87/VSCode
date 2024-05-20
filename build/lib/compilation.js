@@ -8,22 +8,23 @@ exports.watchApiProposalNamesTask = exports.compileApiProposalNamesTask = void 0
 exports.transpileTask = transpileTask;
 exports.compileTask = compileTask;
 exports.watchTask = watchTask;
+const ansiColors = require("ansi-colors");
 const es = require("event-stream");
+const fancyLog = require("fancy-log");
 const fs = require("fs");
 const gulp = require("gulp");
+const os = require("os");
 const path = require("path");
+const File = require("vinyl");
+const index_1 = require("./mangle/index");
 const monacodts = require("./monaco-api");
 const nls = require("./nls");
-const reporter_1 = require("./reporter");
-const util = require("./util");
-const fancyLog = require("fancy-log");
-const ansiColors = require("ansi-colors");
-const os = require("os");
-const ts = require("typescript");
-const File = require("vinyl");
-const task = require("./task");
-const index_1 = require("./mangle/index");
 const postcss_1 = require("./postcss");
+const reporter_1 = require("./reporter");
+const task = require("./task");
+const util = require("./util");
+const Vinyl = require("vinyl");
+const ts = require("typescript");
 const watch = require('./watch');
 // --- gulp-tsb: compile and transpile --------------------------------
 const reporter = (0, reporter_1.createReporter)();
@@ -49,11 +50,28 @@ function createCompile(src, build, emitError, transpileOnly) {
     if (!build) {
         overrideOptions.inlineSourceMap = true;
     }
-    const compilation = tsb.create(projectPath, overrideOptions, {
+    // TODO add compilation with type checking
+    const compilation = tsb.create(projectPath, {
+        ...overrideOptions,
+        esModuleInterop: true
+    }, {
         verbose: false,
         transpileOnly: Boolean(transpileOnly),
         transpileWithSwc: typeof transpileOnly !== 'boolean' && transpileOnly.swc
     }, err => reporter(err));
+    // TODO remove this when all imports are fixed
+    const fixAssertImports = es.through(function (data) {
+        const newContents = data.contents.toString().replace(`import * as assert from 'assert';`, `import assert from 'assert';`);
+        if (data.path.endsWith('.ts')) {
+            this.queue(new Vinyl({
+                ...data,
+                contents: Buffer.from(newContents)
+            }));
+        }
+        else {
+            this.queue(data);
+        }
+    });
     function pipeline(token) {
         const bom = require('gulp-bom');
         const tsFilter = util.filter(data => /\.ts$/.test(data.path));
@@ -69,6 +87,7 @@ function createCompile(src, build, emitError, transpileOnly) {
             .pipe(util.$if(isCSS, (0, postcss_1.gulpPostcss)([postcssNesting()], err => reporter(String(err)))))
             .pipe(tsFilter)
             .pipe(util.loadSourcemaps())
+            .pipe(fixAssertImports)
             .pipe(compilation(token))
             .pipe(noDeclarationsFilter)
             .pipe(util.$if(build, nls.nls()))
