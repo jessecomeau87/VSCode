@@ -8,6 +8,7 @@ import * as platform from 'vs/base/common/platform';
 import { equalsIgnoreCase, startsWithIgnoreCase } from 'vs/base/common/strings';
 import { URI } from 'vs/base/common/uri';
 import * as paths from 'vs/base/common/path';
+import { relativeRoot, root } from 'vs/base/common/root';
 
 export namespace Schemas {
 
@@ -228,10 +229,11 @@ export type AppResourcePath = (
 	| `y${string}` | `z${string}`
 );
 
-export const builtinExtensionsPath: AppResourcePath = 'vs/../../extensions';
-export const nodeModulesPath: AppResourcePath = 'vs/../../node_modules';
-export const nodeModulesAsarPath: AppResourcePath = 'vs/../../node_modules.asar';
-export const nodeModulesAsarUnpackedPath: AppResourcePath = 'vs/../../node_modules.asar.unpacked';
+
+export const builtinExtensionsPath: string = `${relativeRoot}/extensions`;
+export const nodeModulesPath: string = `${relativeRoot}/node_modules`;
+export const nodeModulesAsarPath: string = `${relativeRoot}/node_modules.asar`;
+export const nodeModulesAsarUnpackedPath: string = `${relativeRoot}/node_modules.asar.unpacked`;
 
 export const VSCODE_AUTHORITY = 'vscode-app';
 
@@ -245,8 +247,8 @@ class FileAccessImpl {
 	 *
 	 * **Note:** use `dom.ts#asCSSUrl` whenever the URL is to be used in CSS context.
 	 */
-	asBrowserUri(resourcePath: AppResourcePath | ''): URI {
-		const uri = this.toUri(resourcePath, require);
+	asBrowserUri(resourcePath: AppResourcePath | '' | string): URI {
+		const uri = this.toUri(resourcePath);
 		return this.uriToBrowserUri(uri);
 	}
 
@@ -292,9 +294,25 @@ class FileAccessImpl {
 	 * Returns the `file` URI to use in contexts where node.js
 	 * is responsible for loading.
 	 */
-	asFileUri(resourcePath: AppResourcePath | ''): URI {
-		const uri = this.toUri(resourcePath, require);
+	asFileUri(resourcePath: AppResourcePath | '' | string): URI {
+		const uri = this.toUri(resourcePath);
 		return this.uriToFileUri(uri);
+	}
+
+	appRootFsUri() {
+		return URI.parse(root)
+	}
+
+	appRootUri() {
+		return this.asFileUri('')
+	}
+
+	appRootPath() {
+		const root = this.asFileUri('').fsPath
+		if (root.endsWith('/') || root.endsWith('\\')) {
+			return root.slice(0, -1)
+		}
+		return root
 	}
 
 	/**
@@ -318,12 +336,19 @@ class FileAccessImpl {
 		return uri;
 	}
 
-	private toUri(uriOrModule: URI | string, moduleIdToUrl: { toUrl(moduleId: string): string }): URI {
+	private toUri(uriOrModule: URI | string): URI {
+		if (uriOrModule === '') {
+			return URI.parse(root)
+		}
 		if (URI.isUri(uriOrModule)) {
 			return uriOrModule;
 		}
+		if (uriOrModule.startsWith('vscode-file://') || uriOrModule.startsWith('http://') || uriOrModule.startsWith('https://')) {
+			return URI.parse(uriOrModule);
+		}
+		const resolved = `${root}out/${uriOrModule}`;
+		return URI.parse(resolved);
 
-		return URI.parse(moduleIdToUrl.toUrl(uriOrModule));
 	}
 }
 

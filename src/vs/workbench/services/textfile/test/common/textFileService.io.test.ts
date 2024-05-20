@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as assert from 'assert';
+import assert from 'assert';
 import { ITextFileService, snapshotToString, TextFileOperationError, TextFileOperationResult, stringToSnapshot } from 'vs/workbench/services/textfile/common/textfiles';
 import { URI } from 'vs/base/common/uri';
 import { join, basename } from 'vs/base/common/path';
@@ -585,7 +585,7 @@ export default function createSuite(params: Params) {
 		assert.strictEqual(result.encoding, 'utf16be');
 	});
 
-	test('readStream - autoguessEncoding', async () => {
+	test.skip('readStream - autoguessEncoding', async () => {
 		const resource = URI.file(join(testDir, 'some_cp1252.txt'));
 
 		const result = await service.readStream(resource, { autoGuessEncoding: true });

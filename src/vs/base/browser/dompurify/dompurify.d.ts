@@ -10,7 +10,11 @@
 // Minimum TypeScript Version: 4.5
 
 export as namespace DOMPurify;
-export = DOMPurify;
+
+export const sanitize: typeof DOMPurify.sanitize;
+export const removeHook: typeof DOMPurify.removeHook;
+export const addHook: typeof DOMPurify.addHook;
+export type Config = DOMPurify.Config;
 
 declare const DOMPurify: createDOMPurifyI;
 

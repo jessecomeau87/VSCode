@@ -5,6 +5,7 @@
 
 import type MarkdownIt = require('markdown-it');
 import type Token = require('markdown-it/lib/token');
+// @ts-ignore
 import * as vscode from 'vscode';
 import { ILogger } from './logging';
 import { MarkdownContributionProvider } from './markdownExtensions';
@@ -128,7 +129,7 @@ export class MarkdownItEngine implements IMdParser {
 	private async _getEngine(config: MarkdownItConfig): Promise<MarkdownIt> {
 		if (!this._md) {
 			this._md = (async () => {
-				const markdownIt = await import('markdown-it');
+				const { default: markdownIt } = await import('markdown-it');
 				let md: MarkdownIt = markdownIt(await getMarkdownOptions(() => md));
 				md.linkify.set({ fuzzyLink: false });
 
@@ -140,11 +141,12 @@ export class MarkdownItEngine implements IMdParser {
 					}
 				}
 
-				const frontMatterPlugin = await import('markdown-it-front-matter');
+				const { default: frontMatterPlugin } = await import('markdown-it-front-matter');
 				// Extract rules from front matter plugin and apply at a lower precedence
 				let fontMatterRule: any;
 				frontMatterPlugin({
 					block: {
+						// @ts-ignore
 						ruler: {
 							before: (_id: any, _id2: any, rule: any) => { fontMatterRule = rule; }
 						}

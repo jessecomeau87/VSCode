@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as assert from 'assert';
+import assert from 'assert';
 import { FileAccess } from 'vs/base/common/network';
 import { ensureNoDisposablesAreLeakedInTestSuite } from 'vs/base/test/common/utils';
 import { LanguageService } from 'vs/editor/common/services/languageService';
@@ -22,7 +22,7 @@ suite('Getting Started Markdown Renderer', () => {
 		const fileService = new TestFileService();
 		const languageService = new LanguageService();
 		const renderer = new GettingStartedDetailsRenderer(fileService, new TestNotificationService(), new TestExtensionService(), languageService);
-		const mdPath = convertInternalMediaPathToFileURI('theme_picker').with({ query: JSON.stringify({ moduleId: 'vs/workbench/contrib/welcomeGettingStarted/common/media/theme_picker' }) });
+		const mdPath = convertInternalMediaPathToFileURI('theme_picker').with({ query: JSON.stringify({ moduleId: 'vs/workbench/contrib/welcomeGettingStarted/common/media/theme_picker.js' }) });
 		const mdBase = FileAccess.asFileUri('vs/workbench/contrib/welcomeGettingStarted/common/media/');
 		const rendered = await renderer.renderMarkdown(mdPath, mdBase);
 		const imageSrcs = [...rendered.matchAll(/img src="[^"]*"/g)].map(match => match[0]);
